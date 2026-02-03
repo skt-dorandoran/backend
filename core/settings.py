@@ -6,7 +6,6 @@ def is_local() -> bool:
 
 class Settings(BaseSettings):
     ENV: str = "local"
-    DNS_API_TOKEN: str = "default_token_value"
 
     # 로컬일 때만 .env를 보도록 설정
     model_config = SettingsConfigDict(
