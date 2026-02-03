@@ -7,13 +7,9 @@ services:
     container_name: drdr-backend
     ports:
       - "8000:8000"
-    environment:
-      - DNS_API_TOKEN=${DNS_API_TOKEN}
     networks:
       - dorandoran
 
 networks:
   dorandoran:
     name: dorandoran
-    driver: bridge
-    external: true

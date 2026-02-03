@@ -15,7 +15,6 @@ app = FastAPI(
 
 # 설정값 출력 (디버깅용)
 # print(settings.ENV)
-# print(settings.DNS_API_TOKEN)
 
 app.add_middleware(
     CORSMiddleware,
