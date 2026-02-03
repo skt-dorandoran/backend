@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <title>WebRTC Audio Test</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; }
+    button { margin-right: 8px; }
+    #log { white-space: pre-wrap; background: #111; color: #0f0; padding: 10px; height: 200px; overflow-y: auto; }
+  </style>
+</head>
+<body>
+
+<h2>WebRTC Audio Test</h2>
+
+<div>
+  <input id="roomId" placeholder="room id" value="test-room" />
+</div>
+
+<br/>
+
+<button onclick="join()">Join</button>
+<button onclick="call()">Call</button>
+<button onclick="hangup()">Hangup</button>
+
+<h3>Remote Audio</h3>
+<audio id="remoteAudio" autoplay></audio>
+
+<h3>Log</h3>
+<div id="log"></div>
+
+<script>
+const SIGNALING_URL = "ws://YOUR_SERVER_IP:8080";
+
+const ICE_SERVERS = {
+  iceServers: [
+    { urls: "stun:YOUR_SERVER_IP:3478" },
+    {
+      urls: [
+        "turn:YOUR_SERVER_IP:3478?transport=udp",
+        "turn:YOUR_SERVER_IP:3478?transport=tcp"
+      ],
+      username: "webrtc",
+      credential: "STRONG_PASSWORD_HERE"
+    }
+  ]
+};
+
+let ws;
+let pc;
+let localStream;
+
+function log(msg) {
+  console.log(msg);
+  const el = document.getElementById("log");
+  el.textContent += msg + "\n";
+  el.scrollTop = el.scrollHeight;
+}
+
+async function join() {
+  ws = new WebSocket(SIGNALING_URL);
+
+  ws.onopen = () => {
+    log("WS connected");
+    ws.send(JSON.stringify({
+      type: "join",
+      roomId: roomId.value
+    }));
+  };
+
+  ws.onmessage = async (event) => {
+    const msg = JSON.parse(event.data);
+    log("WS <- " + msg.type);
+
+    if (msg.type === "offer") {
+      await pc.setRemoteDescription(msg.offer);
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      ws.send(JSON.stringify({ type: "answer", answer }));
+    }
+
+    if (msg.type === "answer") {
+      await pc.setRemoteDescription(msg.answer);
+    }
+
+    if (msg.type === "ice") {
+      await pc.addIceCandidate(msg.candidate);
+    }
+  };
+
+  await setupPeer();
+}
+
+async function setupPeer() {
+  pc = new RTCPeerConnection(ICE_SERVERS);
+
+  pc.onicecandidate = (e) => {
+    if (e.candidate) {
+      ws.send(JSON.stringify({
+        type: "ice",
+        candidate: e.candidate
+      }));
+    }
+  };
+
+  pc.ontrack = (e) => {
+    log("Remote track received");
+    remoteAudio.srcObject = e.streams[0];
+  };
+
+  localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  localStream.getTracks().forEach(track => pc.addTrack(track, localStream));
+}
+
+async function call() {
+  const offer = await pc.createOffer();
+  await pc.setLocalDescription(offer);
+  ws.send(JSON.stringify({
+    type: "offer",
+    offer
+  }));
+  log("Offer sent");
+}
+
+function hangup() {
+  if (pc) pc.close();
+  if (ws) ws.close();
+  log("Hangup");
+}
+</script>
+
+</body>
+</html>
