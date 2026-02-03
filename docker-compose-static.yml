@@ -1,0 +1,38 @@
+services:
+  npm:
+    image: 'jc21/nginx-proxy-manager:latest'
+    container_name: npm
+    ports:
+      - '80:80'
+      - '443:443'
+      - '8088:81'
+    environment:
+      TZ: Asia/Seoul
+      DB_MYSQL_HOST: "npmdb"
+      DB_MYSQL_PORT: 3306
+      DB_MYSQL_USER: "npmuser"
+      DB_MYSQL_PASSWORD: "dorandoran"
+      DB_MYSQL_NAME: "npm"
+    volumes:
+      - ./npm/data:/data
+      - /etc/letsencrypt:/etc/letsencrypt
+    restart: unless-stopped
+    depends_on:
+      - npmdb
+  
+  npmdb:
+    image: mariadb
+    container_name: npmdb
+    environment:
+      MYSQL_ROOT_PASSWORD: 'dorandoran'
+      MYSQL_DATABASE: 'npm'
+      MYSQL_USER: 'npmuser'
+      MYSQL_PASSWORD: 'dorandoran'
+      TZ: Asia/Seoul
+    volumes:
+      - ./npmdb/data/mysql:/var/lib/mysql
+    restart: unless-stopped
+
+networks:
+  default:
+    name: dorandoran
