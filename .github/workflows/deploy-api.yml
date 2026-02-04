@@ -64,3 +64,11 @@ jobs:
             fi
 
             echo "==> Deployment completed successfully"
+
+        env:
+          APP_DIR: ${{ vars.APP_DIR }}
+          TARGET_BRANCH: ${{ vars.TARGET_BRANCH }}
+          REPO_URL: ${{ vars.REPO_URL }}
+          CONTAINER_NAME: ${{ vars.CONTAINER_NAME }}
+          IMAGE_NAME: ${{ vars.IMAGE_NAME }}
+          CONTEXT_DIR: ${{ vars.CONTEXT_DIR }}
