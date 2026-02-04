@@ -20,7 +20,6 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    # name: SSH deploy (clone -> stop -> build -> push -> run)
       - uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.SERVER_HOST }}
