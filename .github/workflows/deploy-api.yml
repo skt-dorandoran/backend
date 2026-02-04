@@ -34,7 +34,7 @@ jobs:
             # 1. 소스 코드 준비 (Git)
             echo "==> Prepare repository"
             rm -rf "$APP_DIR"
-            git clone "$REPO_URL" "$APP_DIR"
+            git clone -b "$TARGET_BRANCH" "$REPO_URL" "$APP_DIR"
 
             cd "$APP_DIR"
 
