@@ -27,12 +27,18 @@ jobs:
           key: ${{ secrets.SERVER_KEY }}
           script_stop: true
           script: |
+            echo "============================================"
+            echo "Deployment Script"
+            echo "============================================"
+
             # 1. 소스 코드 준비 (Git)
             echo "==> Prepare repository"
             rm -rf "$APP_DIR"
             git clone "$REPO_URL" "$APP_DIR"
 
             cd "$APP_DIR"
+            echo "==> Checkout target branch: $TARGET_BRANCH"
+            git checkout "$TARGET_BRANCH"
 
             # 2. 기존 리소스 정리
             echo "==> Stop existing container"
@@ -52,7 +58,7 @@ jobs:
             echo "==> Run container"
             docker run --name "$CONTAINER_NAME" \
               --network dorandoran \
-              -p 8000:8080 \
+              -p 8000:8000 \
               -d "$IMAGE_NAME"
 
             # 5. 헬스체크
