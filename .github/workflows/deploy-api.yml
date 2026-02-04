@@ -1,0 +1,71 @@
+name: deploy-api
+
+on:
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-api-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    # 1) Approved 리뷰 + 2) 대상 브랜치가 develop 인 PR만
+    if: >
+      github.event.review.state == 'approved' &&
+      github.event.pull_request.base.ref == 'develop'
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: appleboy/ssh-action@v1.2.5
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USERNAME }}
+          key: ${{ secrets.SERVER_KEY }}
+          script_stop: true
+          script: |
+            echo "============================================"
+            echo "Deployment Script"
+            echo "============================================"
+
+            # 1. 소스 코드 준비 (Git)
+            echo "==> Prepare repository"
+            rm -rf "$APP_DIR"
+            git clone -b "$TARGET_BRANCH" "$REPO_URL" "$APP_DIR"
+
+            cd "$APP_DIR"
+
+            # 2. 기존 리소스 정리
+            echo "==> Stop existing container"
+            docker rm -f "$CONTAINER_NAME" || true
+
+            echo "==> Remove old image"
+            docker rmi "$IMAGE_NAME" || true
+
+            # 3. 도커 이미지 빌드 및 최적화
+            echo "==> Build image locally"
+            docker build -t "$IMAGE_NAME" "$CONTEXT_DIR"
+
+            echo "==> Cleanup dangling images"
+            docker image prune -f
+
+            # 4. 새 컨테이너 실행
+            echo "==> Run container"
+            docker run --name "$CONTAINER_NAME" \
+              --network dorandoran \
+              -p 8000:8000 \
+              -d "$IMAGE_NAME"
+
+            # 5. 헬스체크
+            echo "==> Health check"
+            sleep 5
+            if ! docker ps | grep -q "$CONTAINER_NAME"; then
+              echo "Error: Container failed to start"
+              docker logs "$CONTAINER_NAME"
+              exit 1
+            fi
+
+            echo "==> Deployment completed successfully"

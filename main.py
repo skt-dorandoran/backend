@@ -13,8 +13,8 @@ app = FastAPI(
 # 라우터 여기에 추가
 # app.include_router(xxx_router.router)
 
-print(settings.ENV)
-print(settings.OPENAI_API_KEY)
+# 설정값 출력 (디버깅용)
+# print(settings.ENV)
 
 app.add_middleware(
     CORSMiddleware,
@@ -26,4 +26,4 @@ app.add_middleware(
 
 @app.get("/")
 def main():
-    return "Hello World!"
+    return "Goodbye Everyone, Hello SKT FLY AI!"
