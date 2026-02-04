@@ -26,4 +26,4 @@ app.add_middleware(
 
 @app.get("/")
 def main():
-    return "Hello All Worlds! How are you today?"
+    return "Goodbye Everyone, Hello SKT FLY AI!"
