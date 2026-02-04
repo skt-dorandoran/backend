@@ -20,7 +20,6 @@ jobs:
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_KEY }}
           script_stop: true
-          envs: APP_DIR,TARGET_BRANCH,REPO_URL,CONTAINER_NAME,IMAGE_NAME,CONTEXT_DIR
           script: |
             echo "============================================"
             echo "Deployment Script"
