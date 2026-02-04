@@ -5,14 +5,13 @@
 클라우드 기반 Ubuntu 서버 초기 구축 및 운영 환경 준비
 
 ## 인스턴스 생성
-
 - 인스턴스 위치: 서울, 영역 A (ap-northeast-2a)
 - 이미지: Linux, OS 전용, Ubuntu 24.04 LTS
-- 인스턴스 플랜: $7/month
-  - RAM: 1GB
+- 인스턴스 플랜: $12/month
+  - RAM: `2GB, Swap 6GB 할당 필요`
   - CPU: vCPU x 2
-  - Storage: 40GB SSD
-  - Traffic: 2TB/month (Outbound)
+  - Storage: 600GB SSD
+  - Traffic: 3TB/month (Upload/Download 합산)
 
 ### 추가 설정
 - 인스턴스 고정 IP 설정
