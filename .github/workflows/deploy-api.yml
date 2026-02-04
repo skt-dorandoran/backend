@@ -37,8 +37,6 @@ jobs:
             git clone "$REPO_URL" "$APP_DIR"
 
             cd "$APP_DIR"
-            echo "==> Checkout target branch: $TARGET_BRANCH"
-            git checkout "$TARGET_BRANCH"
 
             # 2. 기존 리소스 정리
             echo "==> Stop existing container"
