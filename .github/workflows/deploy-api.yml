@@ -21,7 +21,7 @@ jobs:
 
     steps:
       - name: SSH deploy (clone -> stop -> build -> push -> run)
-        uses: appleboy/ssh-action@v0.1.6
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.SERVER_HOST }}
           username: ${{ secrets.SERVER_USERNAME }}
@@ -50,6 +50,13 @@ jobs:
 
             cd "$APP_DIR"
             git fetch --all --prune
+
+            # SHA 유효성 검사
+            if ! git cat-file -e "$REF_SHA^{commit}" 2>/dev/null; then
+              echo "Error: Commit $REF_SHA not found"
+              exit 1
+            fi
+
             git checkout -f "$REF_SHA"
 
             # 3. 기존 리소스 정리
@@ -73,3 +80,14 @@ jobs:
               --network dorandoran \
               -p 8000:8080 \
               -d "$IMAGE_NAME"
+
+            # 6. 헬스체크
+            echo "==> Health check"
+            sleep 5
+            if ! docker ps | grep -q "$CONTAINER_NAME"; then
+              echo "Error: Container failed to start"
+              docker logs "$CONTAINER_NAME"
+              exit 1
+            fi
+
+            echo "==> Deployment completed successfully"
