@@ -1,27 +1,16 @@
 name: deploy-api
 
 on:
-  push:
-    branches:
-      - develop
-  pull_request_review:
-    types: [submitted]
+  # push:
+  #   branches: [ "develop" ]
+  pull_request:
+    branches: [ "develop" ]
 
 permissions:
   contents: read
 
-concurrency:
-  group: deploy-api-deploy
-  cancel-in-progress: true
-
 jobs:
   deploy:
-    # 1) Approved 리뷰 + 2) 대상 브랜치가 develop 인 PR만
-    if: >
-      (github.event_name == 'push') ||
-      (github.event_name == 'pull_request_review' && 
-      github.event.review.state == 'approved' &&
-      github.event.pull_request.base.ref == 'develop')
     runs-on: ubuntu-latest
 
     steps:
