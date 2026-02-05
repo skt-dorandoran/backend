@@ -3,6 +3,13 @@
 ## 유의사항
 - 모든 명령어 기반 실행은 최상위 폴더에서 수행합니다.
 - 로컬 환경변수(.env)는 최상위 폴더에 위치하면 됩니다.
+- 환경변수로는 다음과 같은 내용이 포함되어야 합니다.
+    ```
+    DEEPGRAM_API_KEY=your_deepgram_api_key
+    DEEPGRAM_MODEL=nova-3
+    DEEPGRAM_LANGUAGE=ko
+    DEEPGRAM_ENDPOINTING_MS=300
+    ```
 
 ## test_deepgram_local_latency.py
 테스트 1단계, 로컬 파일을 입력받아 속도를 측정합니다.
