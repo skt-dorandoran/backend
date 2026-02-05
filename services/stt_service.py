@@ -9,7 +9,7 @@ from fastapi import UploadFile, WebSocket
 from fastapi.responses import StreamingResponse
 
 from clients.client import DeepgramStreamingClient
-from schemas.schema import StreamEvent, TranscribeDoneResponse
+from schemas.stt_schema import StreamEvent, TranscribeDoneResponse
 from core.settings import settings
 
 
