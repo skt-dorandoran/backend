@@ -19,3 +19,10 @@
 ```
 docker-compose up -d --build
 ```
+
+## 엉뚱한 브랜치에서 작업 중일 때 해당 작업물을 날리지 않고 다른 브랜치로 넘기는 방법
+```
+git stash
+git stash save
+git stash apply
+```
