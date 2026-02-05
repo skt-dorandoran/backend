@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <title>Deepgram Real-time STT Lab</title>
+    <style>
+        :root { --bg-color: #f4f7f6; --primary: #2c3e50; --accent: #3498db; --final-text: #1a1a1a; --interim-text: #7f8c8d; }
+        body { font-family: 'Pretendard', sans-serif; background: var(--bg-color); color: var(--primary); max-width: 900px; margin: 40px auto; padding: 20px; }
+        
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .status-bar { display: flex; align-items: center; gap: 15px; margin-bottom: 20px; font-weight: 600; }
+        #status-light { width: 12px; height: 12px; border-radius: 50%; background: #ccc; }
+        .online { background: #27ae60 !important; box-shadow: 0 0 8px #27ae60; }
+        
+        /* 볼륨 메터 스타일 */
+        .meter-container { width: 100%; height: 8px; background: #eee; border-radius: 4px; overflow: hidden; margin: 10px 0; }
+        #volume-bar { width: 0%; height: 100%; background: #2ecc71; transition: width 0.1s ease; }
+
+        #transcript-box { height: 400px; border: 1px solid #dfe6e9; border-radius: 8px; padding: 20px; overflow-y: auto; background: #fff; line-height: 1.8; font-size: 1.1rem; }
+        .final { color: var(--final-text); font-weight: 500; margin-bottom: 8px; display: inline-block; padding-right: 5px; }
+        .interim { color: var(--interim-text); font-style: italic; }
+        
+        .btn-group { display: flex; gap: 10px; margin-top: 15px; }
+        button { padding: 12px 24px; border: none; border-radius: 6px; font-weight: bold; cursor: pointer; transition: all 0.2s; }
+        #start-btn { background: var(--accent); color: white; }
+        #start-btn:hover { background: #2980b9; }
+        #stop-btn { background: #e74c3c; color: white; }
+        #stop-btn:hover { background: #c0392b; }
+        button:disabled { background: #bdc3c7 !important; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2>🚀 실시간 STT 엔진 테스트</h2>
+        <div class="status-bar">
+            <div id="status-light"></div>
+            <span id="status-text">서버 연결 대기 중</span>
+        </div>
+        
+        <label style="font-size: 0.85rem; color: #666;">마이크 입력 레벨</label>
+        <div class="meter-container">
+            <div id="volume-bar"></div>
+        </div>
+
+        <div class="btn-group">
+            <button id="start-btn">🎙️ 인식 시작</button>
+            <button id="stop-btn" disabled>🛑 중단</button>
+        </div>
+    </div>
+
+    <div class="card">
+        <div id="transcript-box">
+            <span id="final-part"></span>
+            <span id="interim-part" class="interim"></span>
+        </div>
+    </div>
+
+    <script>
+        let socket;
+        let audioContext;
+        let processor;
+        let input;
+        let analyzer;
+        let committed = "";
+
+        let lastInterim = "";
+        const finalChunks = new Map(); // key: start(ms or rounded sec), value: text
+
+        const startBtn = document.getElementById('start-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const statusLight = document.getElementById('status-light');
+        const statusText = document.getElementById('status-text');
+        const volumeBar = document.getElementById('volume-bar');
+        const transcriptBox = document.getElementById('transcript-box');
+
+        async function initSTT() {
+            try {
+                // 1. AudioContext 활성화 (Resume 포함)
+                if (!audioContext) {
+                    audioContext = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+                }
+                await audioContext.resume();
+
+                // 2. 마이크 접근
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                input = audioContext.createMediaStreamSource(stream);
+                
+                // 볼륨 측정을 위한 Analyser 추가
+                analyzer = audioContext.createAnalyser();
+                analyzer.fftSize = 256;
+                input.connect(analyzer);
+                updateVolumeMeter();
+
+                // 3. 웹소켓 연결
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                const wsUrl = `${protocol}//${window.location.host}/api/v1/speech/transcribe/ws?sample_rate=16000&channels=1&model=nova-3`;
+                
+                socket = new WebSocket(wsUrl);
+
+                socket.onopen = () => {
+                    statusLight.className = "online";
+                    statusText.textContent = "연결 성공: 듣고 있습니다...";
+                    startBtn.disabled = true;
+                    stopBtn.disabled = false;
+                    document.getElementById('placeholder')?.remove();
+
+                    // 초기화 메시지 전송
+                    socket.send(JSON.stringify({ sampleRate: 16000 }));
+                };
+
+                socket.onmessage = (msg) => {
+                    const data = JSON.parse(msg.data);
+
+                    if (data.type === "interim") {
+                        document.getElementById("interim-part").innerText = (data.text || "").trim();
+                        return;
+                    }
+
+                    if (data.type === "final") {
+                        const t = (data.text || "").trim();
+                        if (!t) return;
+
+                        // start가 없으면 fallback 키(덜 안정적): 길이/해시 등. 가능하면 start를 꼭 쓰는게 좋음.
+                        const key = (data.start != null)
+                        ? Math.round(data.start * 1000) // ms로 라운딩
+                        : Date.now(); // fallback
+
+                        // 같은 구간은 overwrite (중첩 방지의 핵심)
+                        finalChunks.set(key, t);
+
+                        // start 오름차순으로 합쳐서 “최종 텍스트”를 계속 갱신
+                        const keys = Array.from(finalChunks.keys()).sort((a,b)=>a-b);
+                        const committed = keys.map(k => finalChunks.get(k)).join(" ").replace(/\s+/g," ").trim();
+
+                        document.getElementById("final-part").innerText = committed + " ";
+                        document.getElementById("interim-part").innerText = "";
+                    }
+                };
+
+                socket.onclose = () => {
+                    statusLight.className = "";
+                    statusText.textContent = "연결 종료";
+                    cleanup();
+                };
+
+                // 4. 오디오 스트리밍 처리 (ScriptProcessor 사용)
+                processor = audioContext.createScriptProcessor(4096, 1, 1);
+                processor.onaudioprocess = (e) => {
+                    if (socket && socket.readyState === WebSocket.OPEN) {
+                        const rawData = e.inputBuffer.getChannelData(0);
+                        const pcmData = floatTo16BitPCM(rawData);
+                        socket.send(pcmData.buffer); // 바이너리로 전송
+                    }
+                };
+
+                input.connect(processor);
+                processor.connect(audioContext.destination);
+
+            } catch (err) {
+                console.error("초기화 실패:", err);
+                alert("마이크 접근 권한이 필요합니다.");
+            }
+        }
+
+        // 공백/구두점 제거 정규화(한국어는 띄어쓰기 흔들려서 loose 비교가 중요)
+        function normLoose(s) {
+            return (s || "")
+                .replace(/\s+/g, "")
+                .replace(/[.,!?;:"'()[\]{}<>~`@#$%^&*_+=|\\/]/g, "")
+                .trim();
+        }
+
+        // 두 문자열의 "공통 접두사 비율" (0~1)
+        function lcpRatio(a, b) {
+            const A = normLoose(a);
+            const B = normLoose(b);
+            if (!A || !B) return 0;
+
+            const n = Math.min(A.length, B.length);
+            let i = 0;
+            while (i < n && A[i] === B[i]) i++;
+
+            return i / n;
+        }
+
+        // committed 뒤에 붙일 때, suffix/prefix overlap을 "느슨하게" 제거
+        function appendWithOverlapLoose(committed, incoming) {
+            const C = committed || "";
+            const I = incoming || "";
+
+            // overlap은 raw text에서 하되, 비교는 loose로
+            const cLoose = normLoose(C);
+            const iLoose = normLoose(I);
+            if (!cLoose) return I.trim();
+
+            // 마지막 N자만 overlap 탐색(너무 길면 비용 증가)
+            const WINDOW = 200;
+            const cTailRaw = C.slice(-WINDOW);
+            const cTailLoose = normLoose(cTailRaw);
+
+            // iLoose의 prefix와 cTailLoose의 suffix가 최대한 겹치는 길이 탐색
+            const maxCheck = Math.min(120, cTailLoose.length, iLoose.length);
+            let best = 0;
+            for (let k = 1; k <= maxCheck; k++) {
+                if (cTailLoose.slice(-k) === iLoose.slice(0, k)) best = k;
+            }
+
+            // best는 "loose 문자열 기준"이라 raw에서 정확히 자르긴 어렵습니다.
+            // 그래서 안전하게: overlap이 충분히 크면(예: 20자 이상) 그냥 incoming을 덮어쓰기(누적형에 가깝다고 판단)
+            if (best >= 20) return I.trim();
+
+            // overlap이 작으면 그냥 공백 넣고 append
+            return (C.trim() + " " + I.trim()).replace(/\s+/g, " ").trim();
+        }
+
+        function renderText(text, isFinal) {
+            const finalPart = document.getElementById("final-part");
+            const interimPart = document.getElementById("interim-part");
+
+            const t = (text || "").trim();
+            if (!t) return;
+
+            if (!isFinal) {
+                // interim은 항상 덮어쓰기(실시간 느낌)
+                interimPart.innerText = t;
+            } else {
+                // ✅ 핵심: final이 "누적형"이면 committed를 교체(overwrite)
+                // 판단 기준: committed와 final의 공통 접두사 비율이 높으면 누적형/재작성형으로 간주
+                const ratio = lcpRatio(committed, t);
+
+                if (!committed) {
+                committed = t;
+                } else if (ratio >= 0.55) {
+                // 누적형 가능성이 높음 → 덮어쓰기 (중첩 방지 최강)
+                committed = t;
+                } else {
+                // 증분형 가능성 → overlap 처리 후 append
+                committed = appendWithOverlapLoose(committed, t);
+                }
+
+                finalPart.innerText = committed + " ";
+                interimPart.innerText = "";
+            }
+
+            const box = document.getElementById("transcript-box");
+            box.scrollTop = box.scrollHeight;
+        }
+
+        function updateVolumeMeter() {
+            if (!analyzer || !startBtn.disabled) {
+                volumeBar.style.width = '0%';
+                return;
+            }
+            const dataArray = new Uint8Array(analyzer.frequencyBinCount);
+            analyzer.getByteFrequencyData(dataArray);
+            const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+            volumeBar.style.width = Math.min(100, average * 2) + '%';
+            requestAnimationFrame(updateVolumeMeter);
+        }
+
+        function floatTo16BitPCM(input) {
+            let output = new Int16Array(input.length);
+            for (let i = 0; i < input.length; i++) {
+                let s = Math.max(-1, Math.min(1, input[i]));
+                output[i] = s < 0 ? s * 0x8000 : s * 0x7FFF;
+            }
+            return output;
+        }
+
+        function cleanup() {
+            if (socket) socket.close();
+            if (processor) processor.disconnect();
+            if (input) input.disconnect();
+            startBtn.disabled = false;
+            stopBtn.disabled = true;
+        }
+
+        startBtn.onclick = initSTT;
+        stopBtn.onclick = cleanup;
+    </script>
+</body>
+</html>
