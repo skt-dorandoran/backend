@@ -32,3 +32,12 @@ python -m tools.test_mic_realtime
 
 ## index.html
 테스트 3단계, 간이적인 프론트엔드-웹소켓 연결로 로컬에서 사용자가 마이크로 음성을 입력하여 출력을 확인합니다.
+
+main.py에서 @app.get("/") 부분을 주석 처리하고 아래 부분의 주석을 해제한 뒤 로컬에서 접속하면 됩니다.
+```
+from fastapi.responses import FileResponse
+
+@app.get("/")
+async def get_test_page():
+    return FileResponse("tools/index.html")
+```
