@@ -1,8 +1,7 @@
 import uuid
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from fastapi import UploadFile
 
@@ -11,26 +10,53 @@ from schemas.voice_schema import UploadVoiceSampleResponse
 
 
 def _utc_now_iso_z() -> str:
-    # 예: 2024-02-04T10:15:00Z
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-@dataclass
-class SavedSample:
-    upload_id: str
-    sample_id: str
-    file_path: Path
-    meta: Dict[str, Any]
-
-
 class VoiceService:
-    """
-    - DB 없음: 파일은 디스크에 저장, 메타데이터는 프로세스 메모리에 유지(예시)
-    - 운영 환경이면 메타도 파일/Redis/DB 등으로 영속화 필요
-    """
     _in_memory_meta: Dict[str, Dict[str, Any]] = {}
 
-    allowed_formats = {"wav", "mp3"}
+    # m4a 추가
+    allowed_formats = {"wav", "mp3", "m4a"}
+
+    # content-type -> format 매핑
+    content_type_map = {
+        "audio/wav": "wav",
+        "audio/x-wav": "wav",
+        "audio/mpeg": "mp3",
+        "audio/mp3": "mp3",
+        "audio/mp4": "m4a",
+        "audio/x-m4a": "m4a",
+        "audio/aac": "m4a",  # 환경에 따라 m4a를 이렇게 보내는 경우도 있음
+    }
+
+    def _normalize_format(self, s: Optional[str]) -> str:
+        # Swagger 기본 placeholder "string" 같은 값 방어 + 따옴표 제거
+        if not s:
+            return ""
+        s = s.strip().lower()
+        # 양쪽 따옴표 제거
+        if (s.startswith('"') and s.endswith('"')) or (s.startswith("'") and s.endswith("'")):
+            s = s[1:-1].strip().lower()
+        # swagger placeholder 방어
+        if s == "string":
+            return ""
+        return s
+
+    def _infer_format(self, audio_file: UploadFile) -> str:
+        # 1) filename 확장자 우선
+        filename = (audio_file.filename or "").lower()
+        ext = Path(filename).suffix.lower().lstrip(".")
+        if ext in self.allowed_formats:
+            return ext
+
+        # 2) content_type 기반 추론
+        ct = (audio_file.content_type or "").lower().strip()
+        inferred = self.content_type_map.get(ct, "")
+        if inferred in self.allowed_formats:
+            return inferred
+
+        return ""
 
     async def upload_sample(
         self,
@@ -40,27 +66,26 @@ class VoiceService:
         duration: int,
         sample_rate: int,
     ) -> UploadVoiceSampleResponse:
-        fmt = (audio_format or "").lower().strip()
-        if fmt not in self.allowed_formats:
-            raise ValueError('audioFormat must be one of: "wav", "mp3"')
+        # 1) 일단 클라이언트 값 정규화
+        fmt = self._normalize_format(audio_format)
 
-        # 간단한 확장자/콘텐츠 검사(명세 밖의 추가 필드/변형은 없음)
-        filename = audio_file.filename or f"sample.{fmt}"
-        ext = Path(filename).suffix.lower().lstrip(".")
-        if ext and ext != fmt:
-            # 파일명이 mp3인데 audioFormat이 wav 같은 케이스 방지
-            raise ValueError("audioFormat does not match audioFile extension")
+        # 2) 유효하지 않거나 비어 있으면 파일로부터 추론
+        if fmt not in self.allowed_formats:
+            fmt = self._infer_format(audio_file)
+
+        # 3) 그래도 모르면 400
+        if fmt not in self.allowed_formats:
+            raise ValueError('audioFormat must be one of: "wav", "mp3", "m4a" (or inferable from file)')
 
         upload_id = f"upload_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
         sample_id = f"sample_{uuid.uuid4().hex}"
 
-        # 저장 경로
         safe_name = "".join(c for c in sample_name if c.isalnum() or c in ("-", "_")).strip() or "sample"
         save_dir = settings.UPLOAD_DIR / upload_id
         save_dir.mkdir(parents=True, exist_ok=True)
         save_path = save_dir / f"{safe_name}.{fmt}"
 
-        # 파일 저장 (multipart/form-data 바이너리 그대로)
+        # 파일 저장
         with save_path.open("wb") as f:
             while True:
                 chunk = await audio_file.read(1024 * 1024)
@@ -71,7 +96,7 @@ class VoiceService:
         uploaded_at = _utc_now_iso_z()
         timestamp = _utc_now_iso_z()
 
-        meta = {
+        self._in_memory_meta[sample_id] = {
             "uploadId": upload_id,
             "sampleId": sample_id,
             "sampleName": sample_name,
@@ -80,8 +105,9 @@ class VoiceService:
             "audioFormat": fmt,
             "uploadedAt": uploaded_at,
             "filePath": str(save_path),
+            "originalFilename": audio_file.filename,
+            "contentType": audio_file.content_type,
         }
-        self._in_memory_meta[sample_id] = meta
 
         return UploadVoiceSampleResponse(
             uploadId=upload_id,

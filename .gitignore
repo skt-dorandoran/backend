@@ -213,3 +213,6 @@ __marimo__/
 .mp3
 .m4a
 .flac
+uploads/
+uploads/*
+uploads/voice_samples/
