@@ -235,7 +235,9 @@ async def stream_transcribe_ws(
     클라이언트(=Kotlin)가 binary로 오디오 프레임을 보내면,
     Deepgram Live WS로 즉시 relay하고 transcript 이벤트를 다시 client로 push.
     """
+    print("stream_transcribe_ws entered")
     await client_ws.accept()
+    print("accepted")
 
     # 세션 기준 타이머
     session_start = time.perf_counter()
