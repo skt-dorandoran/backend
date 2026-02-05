@@ -31,7 +31,7 @@ async def transcribe_ws(
     실시간 스트리밍: 클라이언트가 binary frame으로 오디오를 보내면
     transcript를 즉시 WS로 push
     """
-    print("WS route hit")
+    # print("WS route hit")
     await stream_transcribe_ws(
         websocket,
         encoding=encoding,
