@@ -1,17 +1,21 @@
 # 로컬 STT 테스트
 
+## 유의사항
+- 모든 명령어 기반 실행은 최상위 폴더에서 수행합니다.
+- 로컬 환경변수(.env)는 최상위 폴더에 위치하면 됩니다.
+
 ## test_deepgram_local_latency.py
 테스트 1단계, 로컬 파일을 입력받아 속도를 측정합니다.
 
 - 기본 실행
     ```
-    python test_deepgram_local_latency.py --wav ./sample.wav
+    python tools/test_deepgram_local_latency.py --wav tools/wav_test.wav
     ```
 
 - 파라미터 포함 실행
     ```
-    python deepgram_stream_latency.py \
-    --wav ./sample.wav \                    // 테스트 음성 파일명(항상 wav)
+    python tools/test_deepgram_local_latency.py \
+    --wav tools/wav_test.wav \              // 테스트 음성 파일명(항상 wav)
     --model nova-3 \                        // Deepgram 모델 (기본 nova-3)
     --language ko \                         // 인식 언어 (기본 한국어)
     --chunk-ms 50 \                         // 청크 입력 속도 (기본 75)
