@@ -24,6 +24,18 @@ app.add_middleware(
     allow_headers=["*"],  # 모든 헤더 허용
 )
 
+# @app.get("/")
+# def main():
+#     return "Goodbye Everyone, Hello SKT FLY AI!"
+
+
+# ==============================
+# Local Test APIs
+# ==============================
+
+# 테스트용 정적 파일 제공: 기존 @app.get("/") 대체
+from fastapi.responses import FileResponse
+
 @app.get("/")
-def main():
-    return "Goodbye Everyone, Hello SKT FLY AI!"
+async def get_test_page():
+    return FileResponse("tools/index.html")
