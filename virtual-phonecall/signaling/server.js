@@ -1,15 +1,69 @@
 import { WebSocketServer } from "ws";
+import { randomUUID } from "crypto";
+import http from "http";
 
-const wss = new WebSocketServer({ port: 8080 });
+// Create an HTTP server so plain HTTP probes (and health checks) succeed
+// and the ws server can share the same port cleanly under proxy.
+const httpServer = http.createServer((req, res) => {
+  if (req.url === "/health") {
+    res.writeHead(200, { "Content-Type": "text/plain" });
+    res.end("ok");
+    return;
+  }
+  // optional root response
+  res.writeHead(200, { "Content-Type": "text/plain" });
+  res.end("WebSocket signaling server\n");
+});
 
-const rooms = new Map(); // roomId -> Set<ws>
+const wss = new WebSocketServer({ server: httpServer });
+httpServer.listen(8080);
+
+const rooms = new Map(); // roomId -> Set<ws> (legacy)
+const subscribers = new Map(); // roomId -> Set<ws>
+const calls = new Map(); // callId -> call object
 
 function safeSend(ws, obj) {
-  if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj));
+  if (ws && ws.readyState === ws.OPEN) {
+    try {
+      ws.send(JSON.stringify(obj));
+      console.log("SENT:", obj.type, obj.roomId || "", obj.callId || "");
+    } catch (e) {
+      console.error("send error", e);
+    }
+  }
+}
+
+function addToSetMap(map, key, value) {
+  if (!map.has(key)) map.set(key, new Set());
+  map.get(key).add(value);
+}
+
+function removeFromSetMap(map, key, value) {
+  const s = map.get(key);
+  if (!s) return;
+  s.delete(value);
+  if (s.size === 0) map.delete(key);
+}
+
+function cleanupCall(callId, reasonType = "rejected") {
+  const call = calls.get(callId);
+  if (!call) return;
+
+  call.status = reasonType;
+
+  if (call.caller) safeSend(call.caller, { type: reasonType, callId });
+  if (call.callee) safeSend(call.callee, { type: reasonType, callId });
+
+  if (call.caller) call.caller.currentCallId = null;
+  if (call.callee) call.callee.currentCallId = null;
+
+  calls.delete(callId);
 }
 
 wss.on("connection", (ws) => {
   ws.roomId = null;
+  ws.subscribedRooms = new Set();
+  ws.currentCallId = null;
 
   ws.on("message", (data) => {
     let msg;
@@ -19,39 +73,277 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    const { type, roomId } = msg;
+    const { type, roomId, callId, role } = msg;
+    console.log("RECV:", type, roomId || "", callId || "");
 
+    // Legacy join (optionally bind to a call if callId+role provided)
     if (type === "join") {
-      if (ws.roomId) {
-        const prev = rooms.get(ws.roomId);
-        if (prev) prev.delete(ws);
-      }
+      if (ws.roomId) removeFromSetMap(rooms, ws.roomId, ws);
       ws.roomId = roomId;
-      if (!rooms.has(roomId)) rooms.set(roomId, new Set());
-      rooms.get(roomId).add(ws);
+      addToSetMap(rooms, roomId, ws);
 
-      // 현재 인원 수 알려주기 (옵션)
+      if (callId && role) {
+        let call = calls.get(callId);
+        if (!call) {
+          call = {
+            callId,
+            caller: null,
+            callee: null,
+            roomId,
+            status: "ringing",
+            pendingOffer: null,
+            pendingCallerIce: [],
+            pendingCalleeIce: [],
+            pendingAnswer: null
+          };
+          calls.set(callId, call);
+        }
+
+        if (role === "caller") call.caller = ws;
+        if (role === "callee") call.callee = ws;
+        ws.currentCallId = callId;
+      }
+
       safeSend(ws, { type: "joined", roomId, peers: rooms.get(roomId).size - 1 });
       return;
     }
 
-    // offer/answer/ice는 같은 room의 다른 클라이언트에게 브로드캐스트
+    // Subscribe to incoming calls
+    if (type === "subscribe") {
+      if (!roomId) return;
+      addToSetMap(subscribers, roomId, ws);
+      ws.subscribedRooms.add(roomId);
+      safeSend(ws, { type: "subscribed", roomId });
+      return;
+    }
+
+    // Create call (use client-provided callId if present)
+    if (type === "call") {
+      if (!roomId) return;
+
+      const id = callId || randomUUID();
+      let call = calls.get(id);
+      if (!call) {
+        call = {
+          callId: id,
+          caller: ws,
+          callee: null,
+          roomId,
+          status: "ringing",
+          pendingOffer: null,
+          pendingCallerIce: [],
+          pendingCalleeIce: [],
+          pendingAnswer: null
+        };
+        calls.set(id, call);
+      } else {
+        call.caller = ws;
+        call.roomId = roomId || call.roomId;
+        call.status = call.status || "ringing";
+      }
+
+      ws.currentCallId = id;
+
+      const subs = subscribers.get(roomId);
+      if (subs) {
+        for (const sub of subs) {
+          if (sub !== ws) safeSend(sub, { type: "incoming", roomId, callId: id });
+        }
+      }
+      return;
+    }
+
+    // Accept call (callee)
+    if (type === "accept") {
+      if (!callId) return;
+      const call = calls.get(callId);
+      if (!call) return;
+      if (call.status !== "ringing") return;
+
+      if (call.roomId && !ws.subscribedRooms.has(call.roomId)) return;
+
+      call.callee = ws;
+      call.status = "active";
+      ws.currentCallId = callId;
+
+      safeSend(call.caller, { type: "callee_joined", callId });
+
+      // Flush buffered signaling to callee
+      if (call.pendingOffer) safeSend(call.callee, call.pendingOffer);
+      for (const ice of call.pendingCallerIce) safeSend(call.callee, ice);
+      call.pendingOffer = null;
+      call.pendingCallerIce.length = 0;
+
+      // Flush buffered signaling to caller (if any)
+      if (call.pendingAnswer) safeSend(call.caller, call.pendingAnswer);
+      for (const ice of call.pendingCalleeIce) safeSend(call.caller, ice);
+      call.pendingAnswer = null;
+      call.pendingCalleeIce.length = 0;
+
+      return;
+    }
+
+    // Reject call
+    if (type === "reject") {
+      if (!callId) return;
+      cleanupCall(callId, "rejected");
+      return;
+    }
+
+    // Hangup (optional)
+    if (type === "hangup") {
+      if (!callId) return;
+      const call = calls.get(callId);
+      // Broadcast hangup to subscribers in the room
+      if (call && call.roomId) {
+        const subs = subscribers.get(call.roomId);
+        if (subs) {
+          for (const sub of subs) {
+            if (sub !== ws) safeSend(sub, { type: "hangup", roomId: call.roomId, callId });
+          }
+        }
+      }
+      // ensure callers/callees are cleaned up and notified
+      cleanupCall(callId, "hangup");
+      return;
+    }
+
+    // Signaling relay with buffering
+    if (callId && (type === "offer" || type === "answer" || type === "ice")) {
+      const call = calls.get(callId);
+      if (!call) return;
+
+      // Caller -> Callee
+      if (call.caller === ws) {
+        if (type === "offer") {
+          if (call.callee) safeSend(call.callee, msg);
+          else call.pendingOffer = msg;
+          return;
+        }
+        if (type === "ice") {
+          if (call.callee) safeSend(call.callee, msg);
+          else call.pendingCallerIce.push(msg);
+          return;
+        }
+        // caller shouldn't send answer
+        return;
+      }
+
+      // Callee -> Caller
+      if (call.callee === ws) {
+        if (type === "answer") {
+          if (call.caller) safeSend(call.caller, msg);
+          else call.pendingAnswer = msg;
+          return;
+        }
+        if (type === "ice") {
+          if (call.caller) safeSend(call.caller, msg);
+          else call.pendingCalleeIce.push(msg);
+          return;
+        }
+        // callee shouldn't send offer
+        return;
+      }
+
+      return;
+    }
+
+    // Legacy room broadcast fallback
     if (!ws.roomId) return;
     const peers = rooms.get(ws.roomId);
     if (!peers) return;
-
     for (const peer of peers) {
       if (peer !== ws) safeSend(peer, msg);
     }
   });
 
   ws.on("close", () => {
-    if (!ws.roomId) return;
-    const peers = rooms.get(ws.roomId);
-    if (!peers) return;
-    peers.delete(ws);
-    if (peers.size === 0) rooms.delete(ws.roomId);
+    // remember room before removal
+    const myRoom = ws.roomId;
+
+    // remove from legacy rooms
+    if (myRoom) removeFromSetMap(rooms, myRoom, ws);
+
+    // remove from subscribers and notify remaining subscribers that a peer left
+    for (const r of ws.subscribedRooms) {
+      removeFromSetMap(subscribers, r, ws);
+      const subs = subscribers.get(r);
+      if (subs) {
+        for (const sub of subs) {
+          if (sub !== ws) safeSend(sub, { type: "peer_left", roomId: r });
+        }
+      }
+    }
+
+    // notify legacy room peers
+    if (myRoom) {
+      const peers = rooms.get(myRoom);
+      if (peers) {
+        for (const peer of peers) {
+          if (peer !== ws) safeSend(peer, { type: "peer_left", roomId: myRoom });
+        }
+      }
+    }
+
+    // cleanup any active or ringing call this socket participated in
+    const cid = ws.currentCallId;
+    if (cid) {
+      const call = calls.get(cid);
+      if (call) {
+        const other = call.caller === ws ? call.callee : call.caller;
+        if (other) {
+          // notify the other participant that this peer hung up
+          safeSend(other, { type: "hangup", roomId: call.roomId, callId: cid });
+        } else {
+          // no direct other participant yet (caller disconnected before callee accepted)
+          // broadcast hangup to any subscribers in the room so callers see call ended
+          const subs = subscribers.get(call.roomId);
+          if (subs) {
+            for (const sub of subs) {
+              if (sub !== ws) safeSend(sub, { type: "hangup", roomId: call.roomId, callId: cid });
+            }
+          }
+        }
+        calls.delete(cid);
+      }
+      ws.currentCallId = null;
+    }
   });
 });
 
 console.log("Signaling server listening on :8080");
+
+// Graceful shutdown: notify all active calls' peers before exit
+function notifyAllAndClose(reason = "server_shutdown") {
+  for (const [callId, call] of calls.entries()) {
+    try {
+      if (call.caller && call.caller.readyState === call.caller.OPEN) {
+        safeSend(call.caller, { type: "hangup", roomId: call.roomId, callId });
+      }
+      if (call.callee && call.callee.readyState === call.callee.OPEN) {
+        safeSend(call.callee, { type: "hangup", roomId: call.roomId, callId });
+      }
+    } catch (e) {
+      console.error("error notifying call", callId, e);
+    }
+    calls.delete(callId);
+  }
+  try {
+    wss.close();
+    httpServer.close();
+  } catch (e) {
+    // ignore
+  }
+}
+
+process.on("SIGINT", () => {
+  console.log("SIGINT received, shutting down");
+  notifyAllAndClose();
+  process.exit(0);
+});
+
+process.on("SIGTERM", () => {
+  console.log("SIGTERM received, shutting down");
+  notifyAllAndClose();
+  process.exit(0);
+});
