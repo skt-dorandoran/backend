@@ -3,8 +3,15 @@ from fastapi import APIRouter, File, Form, UploadFile, HTTPException
 from schemas.voice_schema import UploadVoiceSampleResponse
 from services.voice_service import VoiceService
 
+from core.settings import settings
+from services.clone_service import ElevenLabsService
+from typing import List
+
 router = APIRouter(prefix="/api/v1/voice", tags=["voice"])
 voice_service = VoiceService()
+
+
+_service = ElevenLabsService(api_key=settings.ELEVENLABS_API_KEY)
 
 
 @router.post("/upload-samples", response_model=UploadVoiceSampleResponse)
@@ -26,4 +33,35 @@ async def upload_voice_samples(
             sample_rate=sampleRate,
         )
     except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+_service = ElevenLabsService(api_key=settings.ELEVENLABS_API_KEY)
+
+
+@router.post("/clone")
+async def create_voice_clone(
+    modelName: str = Form(..., description="생성할 보이스 이름"),
+    modelFile: List[UploadFile] = File(..., description="m4a/wav/mp3 등 음성 샘플 파일들 (여러 개 가능)"),
+):
+    if not modelFile:
+        raise HTTPException(status_code=400, detail="modelFile is required")
+
+    # 파일 바이트 읽기
+    file_bytes_list: List[bytes] = []
+    for f in modelFile:
+        data = await f.read()
+        if not data:
+            raise HTTPException(status_code=400, detail=f"Empty file: {f.filename}")
+        file_bytes_list.append(data)
+
+    try:
+        voice_id = _service.create_voice_clone(name=modelName, file_bytes_list=file_bytes_list)
+        return {
+            "voiceId": voice_id,
+            "modelName": modelName,
+            "fileCount": len(modelFile),
+        }
+    except RuntimeError as e:
+        # 구독/권한 문제(예: can_not_use_instant_voice_cloning)도 여기로 들어옴
         raise HTTPException(status_code=400, detail=str(e))
