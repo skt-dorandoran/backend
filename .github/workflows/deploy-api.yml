@@ -20,7 +20,7 @@ jobs:
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_KEY }}
           script_stop: true
-          envs: APP_DIR,TARGET_BRANCH,REPO_URL,CONTAINER_NAME,IMAGE_NAME,CONTEXT_DIR
+          envs: APP_DIR,TARGET_BRANCH,REPO_URL,CONTAINER_NAME,IMAGE_NAME,CONTEXT_DIR,DEEPGRAM_API_KEY,DEEPGRAM_ENDPOINTING_MS,DEEPGRAM_LANGUAGE,DEEPGRAM_MODEL,OPENAI_API_KEY
           script: |
             echo "============================================"
             echo "Deployment Script"
@@ -52,6 +52,11 @@ jobs:
             docker run --name "$CONTAINER_NAME" \
               --network dorandoran \
               -p 8000:8000 \
+              -e DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY" \
+              -e DEEPGRAM_ENDPOINTING_MS="$DEEPGRAM_ENDPOINTING_MS" \
+              -e DEEPGRAM_LANGUAGE="$DEEPGRAM_LANGUAGE" \
+              -e DEEPGRAM_MODEL="$DEEPGRAM_MODEL" \
+              -e OPENAI_API_KEY="$OPENAI_API_KEY" \
               -d "$IMAGE_NAME"
 
             # 5. 헬스체크
@@ -72,3 +77,8 @@ jobs:
           CONTAINER_NAME: ${{ vars.CONTAINER_NAME }}
           IMAGE_NAME: ${{ vars.IMAGE_NAME }}
           CONTEXT_DIR: ${{ vars.CONTEXT_DIR }}
+          DEEPGRAM_ENDPOINTING_MS: ${{ vars.DEEPGRAM_ENDPOINTING_MS }}
+          DEEPGRAM_LANGUAGE: ${{ vars.DEEPGRAM_LANGUAGE }}
+          DEEPGRAM_MODEL: ${{ vars.DEEPGRAM_MODEL }}
+          DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
