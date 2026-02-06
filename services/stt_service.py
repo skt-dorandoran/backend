@@ -8,7 +8,7 @@ from typing import AsyncIterator, Optional, Tuple
 from fastapi import UploadFile, WebSocket
 from fastapi.responses import StreamingResponse
 
-from clients.client import DeepgramStreamingClient
+from clients.deepgram_client import DeepgramStreamingClient
 from schemas.stt_schema import StreamEvent, TranscribeDoneResponse
 from core.settings import settings
 
@@ -392,7 +392,7 @@ async def stream_transcribe_ws(
 # Local Test Functions
 # =============================
 
-from clients.rest import transcribe_prerecorded
+from clients.deepgram_rest import transcribe_prerecorded
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
