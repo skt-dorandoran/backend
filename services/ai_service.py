@@ -6,8 +6,12 @@ from typing import List
 from openai import AsyncOpenAI
 
 from core.settings import settings
+from clients.rest import transcribe_prerecorded
 from schemas.ai_schema import (
     ConversationMessage,
+    CorrectionSafeguard,
+    CorrectionSteps,
+    CorrectPronunciationResponse,
     GenerateResponseRequest,
     GenerateResponseResponse,
     ResponseItem,
@@ -85,6 +89,42 @@ def _utc_now_iso_z() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
+CORRECTION_SYSTEM_PROMPT = """
+당신은 청각 장애인의 구음장애 음성을 교정하는 어시스턴트입니다.
+STT로 인식된 불명확한 텍스트와 대화 맥락을 분석하여, 사용자가 의도한 명확한 문장을 복원합니다.
+
+- 대화 맥락을 고려하여 깨진 단어나 불완전한 발음을 역추적
+- 자연스러운 한국어 구어체로 복원
+- 짧고 명확한 문장 (1-2문장)
+- 신뢰도가 낮으면 원문을 최대한 유지
+
+반드시 JSON 형식으로만 응답하세요.
+"""
+
+CORRECTION_USER_PROMPT_TEMPLATE = """
+# 대화 맥락
+{conversation_context}
+
+# STT 인식 결과 (불명확한 텍스트)
+"{original_text}"
+
+# 요청
+위 대화 맥락과 STT 결과를 분석하여, 사용자가 의도한 명확한 문장으로 복원해주세요.
+
+JSON 형식:
+{{
+  "correctedText": "교정된 텍스트",
+  "confidence": 0.0~1.0
+}}
+"""
+
+AUDIO_CONTENT_TYPE_MAP = {
+    "wav": "audio/wav",
+    "mp3": "audio/mpeg",
+    "m4a": "audio/mp4",
+}
+
+
 def _build_conversation_context(history: List[ConversationMessage]) -> str:
     if not history:
         return "(대화 시작)"
@@ -138,4 +178,65 @@ class AIService:
             responses=responses,
             generatedAt=_utc_now_iso_z(),
             processingTime=processing_time,
+        )
+
+    async def correct_pronunciation(
+        self,
+        *,
+        call_id: str,
+        audio_bytes: bytes,
+        audio_format: str,
+        conversation_history: List[ConversationMessage],
+    ) -> CorrectPronunciationResponse:
+        total_start = time.perf_counter()
+
+        # ── 1) Deepgram STT ──
+        content_type = AUDIO_CONTENT_TYPE_MAP.get(audio_format, f"audio/{audio_format}")
+        stt_start = time.perf_counter()
+        dg_result = await transcribe_prerecorded(audio_bytes, content_type=content_type)
+        stt_time = int((time.perf_counter() - stt_start) * 1000)
+
+        original_text = (
+            dg_result.get("results", {})
+            .get("channels", [{}])[0]
+            .get("alternatives", [{}])[0]
+            .get("transcript", "")
+        )
+
+        # ── 2) GPT-4o 교정 ──
+        context_str = _build_conversation_context(conversation_history)
+        user_prompt = CORRECTION_USER_PROMPT_TEMPLATE.format(
+            conversation_context=context_str,
+            original_text=original_text,
+        )
+
+        correction_start = time.perf_counter()
+        completion = await self._client.chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": CORRECTION_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.3,
+            max_tokens=300,
+        )
+        correction_time = int((time.perf_counter() - correction_start) * 1000)
+
+        raw = json.loads(completion.choices[0].message.content)
+        corrected_text = raw.get("correctedText", original_text)
+        confidence = raw.get("confidence", 0.0)
+
+        total_time = int((time.perf_counter() - total_start) * 1000)
+
+        return CorrectPronunciationResponse(
+            callId=call_id,
+            originalText=original_text,
+            correctedText=corrected_text,
+            confidence=confidence,
+            processingTime=total_time,
+            steps=CorrectionSteps(sttTime=stt_time, correctionTime=correction_time),
+            safeguard=CorrectionSafeguard(),
+            message="음성이 교정되었습니다. 결과를 확인해주세요",
+            timestamp=_utc_now_iso_z(),
         )

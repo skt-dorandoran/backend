@@ -26,3 +26,29 @@ class GenerateResponseResponse(BaseModel):
     responses: List[ResponseItem]
     generatedAt: str  # ISO 8601 (UTC, Z)
     processingTime: float = Field(description="처리 시간 (초)")
+
+
+# ── 음성 교정 (correct-pronunciation) ──
+
+class CorrectionSteps(BaseModel):
+    sttTime: int = Field(description="STT 처리 시간 (ms)")
+    correctionTime: int = Field(description="GPT 교정 처리 시간 (ms)")
+
+
+class CorrectionSafeguard(BaseModel):
+    userCanReview: bool = True
+    optionsAvailable: List[str] = Field(
+        default=["accept", "retry", "edit_manually"]
+    )
+
+
+class CorrectPronunciationResponse(BaseModel):
+    callId: str
+    originalText: str
+    correctedText: str
+    confidence: float = Field(ge=0.0, le=1.0)
+    processingTime: int = Field(description="전체 처리 시간 (ms)")
+    steps: CorrectionSteps
+    safeguard: CorrectionSafeguard
+    message: str
+    timestamp: str  # ISO 8601 (UTC, Z)
