@@ -17,11 +17,11 @@
 - 인스턴스 고정 IP 설정
 - 방화벽 설정 (아웃바운드 포트 개방)
 - 아이피-도메인 설정
-  - `duckdns.org` 기반의 `dorandoran.duckdns.org` 무료 도메인 연결
+  - Gabia 기반의 `dorandoran.dev` 도메인 연결
 
 ## 서버 접속
 ```
-ssh ubuntu@dorandoran.duckdns.org -i team-dorandoran.pem
+ssh ubuntu@dorandoran.dev -i team-dorandoran.pem
 ```
 
 - 서버 접속은 ssh key가 존재하는 위치에서 CMD/Powershell에 접속한 뒤 접속하면 됨
