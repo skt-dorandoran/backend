@@ -10,7 +10,7 @@
     DEEPGRAM_LANGUAGE=ko
     DEEPGRAM_ENDPOINTING_MS=300
     OPENAI_API_KEY=your_open_ai_key
-    ELEVENLABS_API_KEY=your_open_ai_key
+    ELEVENLABS_API_KEY=your_elevenlabs_ai_key
     ```
 
 ## test_deepgram_local_latency.py
