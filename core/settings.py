@@ -14,6 +14,10 @@ class Settings(BaseSettings):
     DEEPGRAM_LANGUAGE: str = "ko"
     DEEPGRAM_ENDPOINTING_MS: int = 300
 
+    # OpenAI 설정
+    OPENAI_API_KEY: str = ""
+    OPENAI_MODEL: str = "gpt-4o"
+
     # 파일 업로드 디렉토리
     UPLOAD_DIR: Path = Path("uploads/voice_samples")
 
