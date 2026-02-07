@@ -6,7 +6,7 @@ import httpx
 import numpy as np
 import sounddevice as sd
 
-# python tools/test_synthesize_pcm_realtime.py --voice-id CmB5LaFHgSou5vuX2SXZ
+# python tools/test_synthesize_pcm_realtime.py --voice-id YOUR_VOICE_ID
 
 async def main():
     p = argparse.ArgumentParser()
