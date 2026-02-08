@@ -264,12 +264,14 @@ async def stream_transcribe_ws(
 
         raw_text = first["text"].strip()
 
-        # 1) JSON 오브젝트 형태: {"sampleRate": 16000}
+        # 1) JSON 오브젝트 형태: {"sampleRate": 16000, "silenceThreshold": 8.0}
         sr = None
+        silence_threshold = None
         try:
             obj = json.loads(raw_text)
             if isinstance(obj, dict):
                 sr = obj.get("sampleRate")
+                silence_threshold = obj.get("silenceThreshold")
             elif isinstance(obj, (int, float)):
                 # 2) 숫자 단독 형태: 16000 (JSON number)
                 sr = obj
@@ -281,12 +283,23 @@ async def stream_transcribe_ws(
         if not isinstance(sr, (int, float)) or sr <= 0:
             await client_ws.send_json({
                 "type": "error",
-                "text": "Invalid sampleRate. Example: {\"sampleRate\":16000}"
+                "text": "Invalid sampleRate. Example: {\"sampleRate\":16000, \"silenceThreshold\":8.0}"
             })
             await client_ws.close()
             return
 
         sample_rate = int(sr)
+
+        # silenceThreshold 검증 (선택적 파라미터)
+        if silence_threshold is not None:
+            if not isinstance(silence_threshold, (int, float)) or silence_threshold < 5.0:
+                await client_ws.send_json({
+                    "type": "error",
+                    "text": "silenceThreshold must be >= 5.0 seconds"
+                })
+                await client_ws.close()
+                return
+            silence_threshold = float(silence_threshold)
 
     except Exception as e:
         await client_ws.send_json({"type": "error", "text": f"Failed to start transcription: {e}"})
@@ -309,6 +322,37 @@ async def stream_transcribe_ws(
     ) as dg:
 
         stop_event = asyncio.Event()
+
+        # 침묵 감지 상태 (silenceThreshold가 설정된 경우에만 사용)
+        last_speech_time = time.perf_counter() if silence_threshold else None
+        silence_detected_sent = False
+
+        async def silence_monitor():
+            """침묵 감지 모니터링 태스크 (silenceThreshold 설정 시에만 실행)"""
+            nonlocal last_speech_time, silence_detected_sent
+
+            if silence_threshold is None:
+                return
+
+            try:
+                while not stop_event.is_set():
+                    await asyncio.sleep(1.0)  # 1초마다 체크
+
+                    if last_speech_time is None:
+                        continue
+
+                    silence_duration = time.perf_counter() - last_speech_time
+
+                    # 침묵이 threshold를 초과하고, 아직 이벤트를 보내지 않았으면
+                    if silence_duration >= silence_threshold and not silence_detected_sent:
+                        await client_ws.send_json({
+                            "type": "silence_detected",
+                            "silenceDuration": round(silence_duration, 2),
+                            "timestamp": _utc_now_iso(),
+                        })
+                        silence_detected_sent = True
+            except Exception as e:
+                print(f"[Silence Monitor 에러] {e}")
 
         async def client_to_dg():
             try:
@@ -336,12 +380,20 @@ async def stream_transcribe_ws(
                 stop_event.set()
 
         async def dg_to_client():
+            nonlocal last_speech_time, silence_detected_sent
+
             try:
                 async for dg_msg in dg.recv_events():
                     if stop_event.is_set():
                         break
 
                     text, conf, is_final, speech_final, start, duration = _extract_text_and_confidence(dg_msg)
+
+                    # 침묵 감지: 음성 활동이 감지되면 타이머 리셋
+                    if silence_threshold is not None and text.strip():
+                        last_speech_time = time.perf_counter()
+                        silence_detected_sent = False  # 새로운 음성이 감지되면 플래그 리셋
+
                     if not text.strip():
                         continue
 
@@ -378,14 +430,19 @@ async def stream_transcribe_ws(
 
 
         keepalive_task = asyncio.create_task(_keepalive_loop(dg, interval_sec=5))
+        silence_task = asyncio.create_task(silence_monitor()) if silence_threshold else None
+
         try:
-            await asyncio.wait(
-                [asyncio.create_task(client_to_dg()), asyncio.create_task(dg_to_client())],
-                return_when=asyncio.FIRST_COMPLETED
-            )
+            tasks = [
+                asyncio.create_task(client_to_dg()),
+                asyncio.create_task(dg_to_client())
+            ]
+            await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
         finally:
             stop_event.set()
             keepalive_task.cancel()
+            if silence_task:
+                silence_task.cancel()
 
 
 # =============================
