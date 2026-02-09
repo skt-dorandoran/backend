@@ -16,6 +16,10 @@ def _utc_now_iso_z() -> str:
 
 
 class VoiceService:
+    def __init__(self) -> None:
+        self.base_url = settings.ELEVENLABS_BASE_URL.rstrip("/")
+        self.api_key = settings.ELEVENLABS_API_KEY
+        
     _in_memory_meta: Dict[str, Dict[str, Any]] = {}
 
     # m4a 추가
