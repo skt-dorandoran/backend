@@ -11,6 +11,7 @@ Backend for dorandoran project
     - `DEEPGRAM_ENDPOINTING_MS`: Deepgram STT 서비스 엔드포인트(문장 별 일시정지) 시간입니다. 기본적으로 300ms을 지정합니다.
     - `OPENAI_API_KEY`: OpenAI 서비스 API 키입니다. **비밀 키이므로 유출되어서는 안됩니다.**
     - `ELEVENLABS_API_KEY`: Elevenlabs 서비스 API 키입니다. **비밀 키이므로 유출되어서는 안됩니다.**
+    - `ELEVENLABS_TTS_MODEL_ID`: Elevenlabs TTS 서비스 모델입니다. 기본적으로 eleven_multilingual_v2을 지정합니다.
 - 최종적인 .env 파일의 내용은 다음과 같습니다.
     ```
     DEEPGRAM_API_KEY=your_deepgram_api_key
@@ -19,6 +20,7 @@ Backend for dorandoran project
     DEEPGRAM_ENDPOINTING_MS=300
     OPENAI_API_KEY=your_open_ai_key
     ELEVENLABS_API_KEY=your_elevenlabs_ai_key
+    ELEVENLABS_TTS_MODEL_ID=eleven_multilingual_v2
     ```
 
 ## 기능

@@ -11,9 +11,11 @@
     DEEPGRAM_ENDPOINTING_MS=300
     OPENAI_API_KEY=your_open_ai_key
     ELEVENLABS_API_KEY=your_elevenlabs_ai_key
+    ELEVENLABS_TTS_MODEL_ID=eleven_multilingual_v2
     ```
 
-## test_deepgram_local_latency.py
+## STT 테스트
+### test_deepgram_local_latency.py
 테스트 1단계, 로컬 파일을 입력받아 속도를 측정합니다.
 
 - 기본 실행
@@ -37,13 +39,13 @@
     --verbose \                             // 켜면 수신되는 텍스트를 즉시 출력 플래그
     ```
 
-## test_mic_realtime.py
+### test_mic_realtime.py
 테스트 2단계, 로컬에서 사용자가 마이크로 음성을 입력하여 출력을 확인합니다.
 ```
 python -m tools.test_mic_realtime
 ```
 
-## test_ws_silence_detection.py
+### test_ws_silence_detection.py
 테스트 3단계, 백엔드 WebSocket STT API + 침묵 감지 기능을 테스트합니다.
 
 **사전 준비**: 백엔드 서버가 실행 중이어야 합니다.
@@ -76,7 +78,7 @@ python -m uvicorn main:app --reload
 - `test_mic_realtime.py`는 Deepgram API에 **직접 연결** (서버 불필요)
 - `test_ws_silence_detection.py`는 **백엔드 서버 경유** (서버 필수)
 
-## index.html
+### index.html
 테스트 4단계, 간이적인 프론트엔드-웹소켓 연결로 로컬에서 사용자가 마이크로 음성을 입력하여 출력을 확인합니다.
 
 로컬 프론트엔드의 실행을 위해 main.py에서 기존의 @app.get("/") 부분을 주석 처리하고
@@ -94,3 +96,37 @@ from fastapi.responses import FileResponse
 async def get_test_page():
     return FileResponse("tools/index.html")
 ```
+
+## TTS 테스트
+아래 테스트는 클론된 Elevenlabs 음성 모델 ID를 요구합니다.
+
+### test_synthesize_wav.py
+테스트 1단계, 모델 ID와 문장을 입력받아 wav 파일을 생성합니다.
+- 기본 실행
+    ```
+    python tools/test_synthesize_wav.py --voice-id YOUR_VOICE_ID --play
+    ```
+- 파라미터 포함 실행
+    ```
+    python tools/test_synthesize_wav.py \
+    --call-id "call_test_001" \             // 음성 세션의 ID 부여
+    --voice-id YOUR_VOICE_ID \              // 클론된 음성의 Elevenlabs 호출 ID
+    --text "example" \                      // 출력할 텍스트 문장
+    --source-type "ai_response" \           // 출력 유형, "ai_response", "corrected", "typed" 중 하나 선택
+    --out "response_audio.wav" \            // 출력 저장 파일 명칭 및 형식
+    --play                                  // 다운로드 완료 후 자동 재생
+    ```
+
+### test_synthesize_pcm_realtime.py
+테스트 2단계, 모델 ID와 문장을 입력받아 실시간에 가깝게 출력합니다.
+- 기본 실행
+    ```
+    python tools/test_synthesize_pcm_realtime.py --voice-id YOUR_VOICE_ID
+    ```
+- 파라미터 포함 실행
+    ```
+    python tools/test_synthesize_pcm_realtime.py \
+    --call-id "call_test_001" \             // 음성 세션의 ID 부여
+    --voice-id YOUR_VOICE_ID \              // 클론된 음성의 Elevenlabs 호출 ID
+    --text "example" \                      // 출력할 텍스트 문장
+    ```
