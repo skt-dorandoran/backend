@@ -45,10 +45,43 @@
 python -m tools.test_mic_realtime
 ```
 
-### index.html
-테스트 3단계, 간이적인 프론트엔드-웹소켓 연결로 로컬에서 사용자가 마이크로 음성을 입력하여 출력을 확인합니다.
+### test_ws_silence_detection.py
+테스트 3단계, 백엔드 WebSocket STT API + 침묵 감지 기능을 테스트합니다.
 
-로컬 프론트엔드의 실행을 위해 main.py에서 기존의 @app.get("/") 부분을 주석 처리하고 
+**사전 준비**: 백엔드 서버가 실행 중이어야 합니다.
+```bash
+# 터미널 1: 서버 실행
+python -m uvicorn main:app --reload
+```
+
+- 기본 실행 (침묵 감지 활성화: 8초)
+    ```bash
+    # 터미널 2: 테스트 실행
+    python tools/test_ws_silence_detection.py
+    ```
+
+- 설정 변경: 파일 내부 `SILENCE_THRESHOLD` 값 수정
+    ```python
+    # 침묵 감지 활성화 (5~N초)
+    SILENCE_THRESHOLD = 8.0  # 8초간 침묵 시 알림
+
+    # 침묵 감지 비활성화
+    SILENCE_THRESHOLD = None  # 침묵 감지 기능 꺼짐
+    ```
+
+- 테스트 시나리오
+    1. 마이크로 말하기 → STT 결과 확인
+    2. 8초간 침묵 유지 → `silence_detected` 이벤트 확인
+    3. 다시 말하기 → 타이머 리셋 확인
+
+**주의사항**:
+- `test_mic_realtime.py`는 Deepgram API에 **직접 연결** (서버 불필요)
+- `test_ws_silence_detection.py`는 **백엔드 서버 경유** (서버 필수)
+
+### index.html
+테스트 4단계, 간이적인 프론트엔드-웹소켓 연결로 로컬에서 사용자가 마이크로 음성을 입력하여 출력을 확인합니다.
+
+로컬 프론트엔드의 실행을 위해 main.py에서 기존의 @app.get("/") 부분을 주석 처리하고
 ```
 @app.get("/")
 def main():
