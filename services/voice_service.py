@@ -1,10 +1,11 @@
 import uuid
+import httpx
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from fastapi import UploadFile
+from fastapi import HTTPException, UploadFile
 
 from core.settings import settings
 from schemas.voice_schema import UploadVoiceSampleResponse
@@ -119,4 +120,40 @@ class VoiceService:
             nextStep="train_voice_clone",
             message="음성 샘플이 성공적으로 업로드되었습니다",
             timestamp=timestamp,
+        )
+    
+    async def delete_voice(self, voice_id: str) -> dict:
+        url = f"{self.base_url}/v1/voices/{voice_id}"
+
+        headers = {
+            "xi-api-key": self.api_key,
+            "accept": "application/json",
+        }
+
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.delete(url, headers=headers)
+
+        # 200이면 보통 {"status":"ok"} 형태 :contentReference[oaicite:3]{index=3}
+        if resp.status_code == 200:
+            try:
+                return resp.json()
+            except Exception:
+                # 혹시 JSON 파싱 실패해도 내부 응답 규격을 맞춰줌
+                return {"status": "ok"}
+
+        # ElevenLabs 에러 바디를 그대로 전달(가능한 경우)
+        detail = None
+        try:
+            detail = resp.json()
+        except Exception:
+            detail = resp.text
+
+        # 내부 표준화: upstream 에러를 502로 래핑
+        raise HTTPException(
+            status_code=502,
+            detail={
+                "message": "ElevenLabs delete_voice failed",
+                "status_code": resp.status_code,
+                "upstream": detail,
+            },
         )
