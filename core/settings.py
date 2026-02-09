@@ -5,6 +5,10 @@ from pathlib import Path
 def is_local() -> bool:
     return os.getenv("ENV", "local").lower() == "local"
 
+if is_local():
+    from dotenv import load_dotenv
+    load_dotenv(dotenv_path=".env", override=True)
+
 class Settings(BaseSettings):
     ENV: str = "local"
 
@@ -17,6 +21,9 @@ class Settings(BaseSettings):
     # OpenAI 설정
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o"
+
+    # ElevenLabs 설정
+    ELEVENLABS_API_KEY: str = ""
 
     # 파일 업로드 디렉토리
     UPLOAD_DIR: Path = Path("uploads/voice_samples")

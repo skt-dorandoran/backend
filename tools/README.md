@@ -1,4 +1,4 @@
-# 로컬 STT 테스트
+# 로컬 테스트
 
 ## 유의사항
 - 모든 명령어 기반 실행은 최상위 폴더에서 수행합니다.
@@ -9,6 +9,8 @@
     DEEPGRAM_MODEL=nova-3
     DEEPGRAM_LANGUAGE=ko
     DEEPGRAM_ENDPOINTING_MS=300
+    OPENAI_API_KEY=your_open_ai_key
+    ELEVENLABS_API_KEY=your_elevenlabs_ai_key
     ```
 
 ## test_deepgram_local_latency.py

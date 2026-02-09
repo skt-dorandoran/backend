@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-from clients.client import DeepgramStreamingClient
+from clients.deepgram_client import DeepgramStreamingClient
 from core.settings import settings
 
 # .env 로드
