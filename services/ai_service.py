@@ -1,6 +1,7 @@
 import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import List
 
 from openai import AsyncOpenAI
@@ -82,7 +83,7 @@ JSON 형식:
 
 
 def _utc_now_iso_z() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(ZoneInfo("Asia/Seoul")).replace(microsecond=0).isoformat()
 
 
 def _build_conversation_context(history: List[ConversationMessage]) -> str:

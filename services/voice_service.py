@@ -1,5 +1,6 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path
 from typing import Dict, Any, Optional
 
@@ -10,7 +11,7 @@ from schemas.voice_schema import UploadVoiceSampleResponse
 
 
 def _utc_now_iso_z() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(ZoneInfo("Asia/Seoul")).replace(microsecond=0).isoformat()
 
 
 class VoiceService:
@@ -77,7 +78,7 @@ class VoiceService:
         if fmt not in self.allowed_formats:
             raise ValueError('audioFormat must be one of: "wav", "mp3", "m4a" (or inferable from file)')
 
-        upload_id = f"upload_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
+        upload_id = f"upload_{datetime.now(ZoneInfo('Asia/Seoul')).strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:6]}"
         sample_id = f"sample_{uuid.uuid4().hex}"
 
         safe_name = "".join(c for c in sample_name if c.isalnum() or c in ("-", "_")).strip() or "sample"
