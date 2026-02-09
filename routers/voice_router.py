@@ -1,6 +1,6 @@
-from fastapi import APIRouter, File, Form, UploadFile, HTTPException
+from fastapi import APIRouter, File, Form, Path, Body, UploadFile, HTTPException
 
-from schemas.voice_schema import UploadVoiceSampleResponse
+from schemas.voice_schema import UploadVoiceSampleResponse, VoiceDeleteRequest, VoiceDeleteResponse
 from services.voice_service import VoiceService
 
 from core.settings import settings
@@ -65,3 +65,21 @@ async def create_voice_clone(
     except RuntimeError as e:
         # 구독/권한 문제(예: can_not_use_instant_voice_cloning)도 여기로 들어옴
         raise HTTPException(status_code=400, detail=str(e))
+
+@router.post("/voice-delete/{voiceId}", response_model=VoiceDeleteResponse)
+async def delete_voice(
+    voiceId: str = Path(..., description="삭제할 음성 모델 ID"),
+    body: VoiceDeleteRequest = Body(default=VoiceDeleteRequest()),
+):
+    # body가 들어오면 path와 일치하는지 검증 (명세 충족 + 안전장치)
+    if body.voiceId is not None and body.voiceId != voiceId:
+        raise HTTPException(
+            status_code=400,
+            detail="voiceId in body must match voiceId in path",
+        )
+
+    result = await voice_service.delete_voice(voiceId)
+
+    # ElevenLabs는 보통 {"status":"ok"} :contentReference[oaicite:4]{index=4}
+    status = result.get("status", "ok")
+    return VoiceDeleteResponse(status=status)

@@ -63,6 +63,7 @@ jobs:
               -e OPENAI_API_KEY="$OPENAI_API_KEY" \
               -e ELEVENLABS_API_KEY="$ELEVENLABS_API_KEY" \
               -e ELEVENLABS_TTS_MODEL_ID="$ELEVENLABS_TTS_MODEL_ID" \
+              -e ELEVENLABS_BASE_URL="$ELEVENLABS_BASE_URL" \
               -d "$IMAGE_NAME"
 
             # 5. 헬스체크
@@ -87,6 +88,7 @@ jobs:
           DEEPGRAM_LANGUAGE: ${{ vars.DEEPGRAM_LANGUAGE }}
           DEEPGRAM_MODEL: ${{ vars.DEEPGRAM_MODEL }}
           ELEVENLABS_TTS_MODEL_ID: ${{ vars.ELEVENLABS_TTS_MODEL_ID }}
+          ELEVENLABS_BASE_URL: ${{ vars.ELEVENLABS_BASE_URL }}
           DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}

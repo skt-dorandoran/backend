@@ -12,6 +12,7 @@ Backend for dorandoran project
     - `OPENAI_API_KEY`: OpenAI 서비스 API 키입니다. **비밀 키이므로 유출되어서는 안됩니다.**
     - `ELEVENLABS_API_KEY`: Elevenlabs 서비스 API 키입니다. **비밀 키이므로 유출되어서는 안됩니다.**
     - `ELEVENLABS_TTS_MODEL_ID`: Elevenlabs TTS 서비스 모델입니다. 기본적으로 eleven_multilingual_v2을 지정합니다.
+    - `ELEVENLABS_BASE_URL`: Elevenlabs API 접속 URL입니다. 기본적으로 https://api.elevenlabs.io를 지정합니다.
 - 최종적인 .env 파일의 내용은 다음과 같습니다.
     ```
     DEEPGRAM_API_KEY=your_deepgram_api_key
@@ -21,6 +22,7 @@ Backend for dorandoran project
     OPENAI_API_KEY=your_open_ai_key
     ELEVENLABS_API_KEY=your_elevenlabs_ai_key
     ELEVENLABS_TTS_MODEL_ID=eleven_multilingual_v2
+    ELEVENLABS_BASE_URL=https://api.elevenlabs.io
     ```
 
 ## 기능

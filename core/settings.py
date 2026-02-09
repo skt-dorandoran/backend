@@ -25,6 +25,7 @@ class Settings(BaseSettings):
     # ElevenLabs 설정
     ELEVENLABS_API_KEY: str = ""
     ELEVENLABS_TTS_MODEL_ID: str = "eleven_multilingual_v2"
+    ELEVENLABS_BASE_URL: str = "https://api.elevenlabs.io"
 
     # 파일 업로드 디렉토리
     UPLOAD_DIR: Path = Path("uploads/voice_samples")
