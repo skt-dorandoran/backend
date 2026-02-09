@@ -12,6 +12,7 @@
     OPENAI_API_KEY=your_open_ai_key
     ELEVENLABS_API_KEY=your_elevenlabs_ai_key
     ELEVENLABS_TTS_MODEL_ID=eleven_multilingual_v2
+    ELEVENLABS_BASE_URL=https://api.elevenlabs.io
     ```
 
 ## STT 테스트
