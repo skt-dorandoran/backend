@@ -15,7 +15,7 @@ class StreamEvent(BaseModel):
     """
     SSE/WS로 보내는 이벤트(권장 포맷)
     """
-    type: Literal["interim", "final", "meta", "error", "done"]
+    type: Literal["interim", "final", "meta", "error", "done", "silence_detected"]
     text: Optional[str] = None
     confidence: Optional[float] = None
     is_final: Optional[bool] = None
