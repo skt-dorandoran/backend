@@ -2,7 +2,8 @@ import asyncio
 from email.mime import text
 import json
 import time
-from datetime import datetime, timezone
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from typing import AsyncIterator, Optional, Tuple
 
 from fastapi import UploadFile, WebSocket
@@ -30,7 +31,7 @@ def apply_korean_spacing(text: str) -> str:
 
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(ZoneInfo("Asia/Seoul")).replace(microsecond=0).isoformat()
 
 
 def _extract_text_and_confidence(dg_msg: any):
@@ -395,7 +396,7 @@ async def stream_transcribe_ws(
 from clients.rest import transcribe_prerecorded
 
 def _utc_now_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(ZoneInfo("Asia/Seoul")).replace(microsecond=0).isoformat()
 
 
 def _extract_best_alt(dg_json: dict):

@@ -1,4 +1,5 @@
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 from typing import Dict, Any, List, Optional, Tuple
 
 from schemas.crisis_schema import (
@@ -65,7 +66,7 @@ COMPREHENSION_FAILURE_KEYWORDS = [
 
 
 def _utc_now_iso_z() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+    return datetime.now(ZoneInfo("Asia/Seoul")).replace(microsecond=0).isoformat()
 
 
 def _parse_iso_timestamp(timestamp_str: str) -> datetime:
@@ -92,7 +93,7 @@ class CrisisService:
                 "failure_count": 0,
                 "last_keyword": None,
                 "last_keyword_time": None,
-                "last_activity_time": datetime.now(timezone.utc),
+                "last_activity_time": datetime.now(ZoneInfo("Asia/Seoul")),
                 "matched_keywords_history": [],
             }
         return self._call_states[call_id]
@@ -159,7 +160,7 @@ class CrisisService:
         try:
             current_time = _parse_iso_timestamp(request.timestamp)
         except Exception:
-            current_time = datetime.now(timezone.utc)
+            current_time = datetime.now(ZoneInfo("Asia/Seoul"))
 
         # 상태 가져오기
         call_state = self._get_or_create_call_state(request.callId)
