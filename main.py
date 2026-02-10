@@ -3,7 +3,7 @@ from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 
 from core.settings import settings
-from routers import stt_router, voice_router, ai_router, crisis_router
+from routers import onboarding_router, stt_router, voice_router, ai_router, crisis_router
 
 app = FastAPI(
     title="Backend API Server",
@@ -17,6 +17,7 @@ app.include_router(stt_router.router)
 app.include_router(voice_router.router)
 app.include_router(ai_router.router)
 app.include_router(crisis_router.router)
+app.include_router(onboarding_router.router)
 
 # 설정값 출력 (디버깅용)
 # print(settings.ENV)

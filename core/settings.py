@@ -29,6 +29,8 @@ class Settings(BaseSettings):
 
     # 파일 업로드 디렉토리
     UPLOAD_DIR: Path = Path("uploads/voice_samples")
+    PERSONA_DIR: Path = Path("uploads/personas")
+    ONBOARDING_DIR: Path = Path("uploads/onboarding")
 
     # 로컬일 때만 .env를 보도록 설정
     model_config = SettingsConfigDict(
@@ -39,3 +41,5 @@ class Settings(BaseSettings):
 
 settings = Settings()
 settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+settings.PERSONA_DIR.mkdir(parents=True, exist_ok=True)
+settings.ONBOARDING_DIR.mkdir(parents=True, exist_ok=True)
