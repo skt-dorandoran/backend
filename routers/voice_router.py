@@ -66,20 +66,29 @@ async def create_voice_clone(
         # 구독/권한 문제(예: can_not_use_instant_voice_cloning)도 여기로 들어옴
         raise HTTPException(status_code=400, detail=str(e))
 
-@router.post("/voice-delete/{voiceId}", response_model=VoiceDeleteResponse)
+
+@router.delete("/{voiceId}", response_model=VoiceDeleteResponse)
 async def delete_voice(
     voiceId: str = Path(..., description="삭제할 음성 모델 ID"),
-    body: VoiceDeleteRequest = Body(default=VoiceDeleteRequest()),
 ):
-    # body가 들어오면 path와 일치하는지 검증 (명세 충족 + 안전장치)
-    if body.voiceId is not None and body.voiceId != voiceId:
+    """
+    ElevenLabs 음성 모델 삭제
+    
+    - **voiceId**: 삭제할 음성 ID
+    
+    DELETE /api/v1/voice/{voiceId}
+    """
+    try:
+        result = await voice_service.delete_voice(voiceId)
+        status = result.get("status", "ok")
+        return VoiceDeleteResponse(status=status)
+    
+    except HTTPException:
+        # voice_service에서 발생한 HTTPException은 그대로 전달
+        raise
+    
+    except Exception as e:
         raise HTTPException(
-            status_code=400,
-            detail="voiceId in body must match voiceId in path",
+            status_code=500,
+            detail=f"Unexpected error: {str(e)}"
         )
-
-    result = await voice_service.delete_voice(voiceId)
-
-    # ElevenLabs는 보통 {"status":"ok"} :contentReference[oaicite:4]{index=4}
-    status = result.get("status", "ok")
-    return VoiceDeleteResponse(status=status)
