@@ -53,10 +53,10 @@ class Settings(BaseSettings):
 settings = Settings()
 
 # 디버깅용 출력
-print(f"📍 현재 환경: {settings.ENV}")
-print(f"🔑 DEEPGRAM_API_KEY 설정됨: {bool(settings.DEEPGRAM_API_KEY)}")
-print(f"🔑 OPENAI_API_KEY 설정됨: {bool(settings.OPENAI_API_KEY)}")
-print(f"🔑 ELEVENLABS_API_KEY 설정됨: {bool(settings.ELEVENLABS_API_KEY)}")
+# print(f"📍 현재 환경: {settings.ENV}")
+# print(f"🔑 DEEPGRAM_API_KEY 설정됨: {bool(settings.DEEPGRAM_API_KEY)}")
+# print(f"🔑 OPENAI_API_KEY 설정됨: {bool(settings.OPENAI_API_KEY)}")
+# print(f"🔑 ELEVENLABS_API_KEY 설정됨: {bool(settings.ELEVENLABS_API_KEY)}")
 
 # 디렉토리 생성
 settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
