@@ -52,7 +52,7 @@ class ElevenTTSService:
             "model_id": self.model_id,
         }
 
-        async with httpx.AsyncClient(timeout=60.0) as client:
+        async with httpx.AsyncClient(timeout=60.0, trust_env=False) as client:
             r = await client.post(url, params=params, headers=headers, json=payload)
 
         if r.status_code != 200:
