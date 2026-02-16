@@ -56,6 +56,7 @@ jobs:
             docker run --name "$CONTAINER_NAME" \
               --network dorandoran \
               -p 8000:8000 \
+              -e ENV="production" \
               -e DEEPGRAM_API_KEY="$DEEPGRAM_API_KEY" \
               -e DEEPGRAM_ENDPOINTING_MS="$DEEPGRAM_ENDPOINTING_MS" \
               -e DEEPGRAM_LANGUAGE="$DEEPGRAM_LANGUAGE" \
