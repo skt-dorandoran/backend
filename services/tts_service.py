@@ -3,7 +3,9 @@ from __future__ import annotations
 import time
 import wave
 from io import BytesIO
-from typing import Tuple, Optional
+from typing import Tuple
+import re
+from urllib.parse import quote
 
 import httpx
 
@@ -13,6 +15,9 @@ class ElevenTTSError(RuntimeError):
 
 
 class ElevenTTSService:
+    # voice_id에 슬래시/공백/특수문자 섞이는 케이스를 서버에서 조기에 차단
+    _VOICE_ID_RE = re.compile(r"^[A-Za-z0-9]{10,64}$")
+
     def __init__(self, api_key: str, model_id: str = "eleven_multilingual_v2"):
         self.api_key = api_key
         self.model_id = model_id
@@ -21,33 +26,52 @@ class ElevenTTSService:
         """
         ElevenLabs TTS convert로 PCM(S16LE) 16kHz raw bytes를 받아온다.
         """
-        if not voice_id or not voice_id.strip():
-            raise ValueError("voice_id cannot be empty")
-    
+        # (1) 정규화: URL에 넣기 전에 반드시 strip된 값 사용
+        voice_id_norm = (voice_id or "").strip()
+        if not voice_id_norm:
+            raise ElevenTTSError("voice_id cannot be empty")
+
+        # (2) 패턴 검증: path 깨는 문자(/, ?, #, 공백 등) 차단
+        if not self._VOICE_ID_RE.match(voice_id_norm):
+            raise ElevenTTSError(f"voice_id looks invalid: repr={voice_id_norm!r}")
+
         if not self.api_key:
             raise ElevenTTSError("ELEVENLABS_API_KEY is empty")
 
-        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id}"
-        params = {"output_format": "pcm_16000"}  # enum에 포함 :contentReference[oaicite:4]{index=4}
+        # (3) 안전 인코딩: 혹시 모를 특수문자 방지 (safe=''로 완전 인코딩)
+        voice_id_path = quote(voice_id_norm, safe="")
+        url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice_id_path}"
+
+        params = {"output_format": "pcm_16000"}
         headers = {
-            "xi-api-key": self.api_key,          # 인증 헤더 :contentReference[oaicite:5]{index=5}
+            "xi-api-key": self.api_key,
             "Content-Type": "application/json",
         }
         payload = {
             "text": text,
-            "model_id": self.model_id,           # 문서에 존재 :contentReference[oaicite:6]{index=6}
+            "model_id": self.model_id,
         }
 
         async with httpx.AsyncClient(timeout=60.0) as client:
             r = await client.post(url, params=params, headers=headers, json=payload)
 
         if r.status_code != 200:
-            # ElevenLabs는 JSON 에러를 주는 경우가 많아서 그대로 노출
             try:
                 detail = r.json()
             except Exception:
                 detail = r.text
-            raise ElevenTTSError(f"ElevenLabs TTS failed: {r.status_code} {detail}")
+
+            # (4) 서버 원인 강제 노출: 실제 요청 URL + voice_id repr 포함
+            req_url = ""
+            try:
+                req_url = str(r.request.url)
+            except Exception:
+                req_url = "<no request url>"
+
+            raise ElevenTTSError(
+                f"ElevenLabs TTS failed: {r.status_code} {detail} | "
+                f"voice_id_repr={voice_id_norm!r} | request_url={req_url}"
+            )
 
         return r.content  # raw PCM bytes
 
@@ -82,8 +106,6 @@ class ElevenTTSService:
         """
         t0 = time.perf_counter()
 
-        # "모델 로드 시간"은 ElevenLabs 쪽 모델 로딩 개념이 외부에 드러나지 않으므로
-        # 여기서는 '요청 준비/첫 호출 오버헤드'를 모델 로드로 잡아 근사치로 반환(일관성 목적)
         t_model0 = time.perf_counter()
         pcm = await self.synthesize_pcm_16k(voice_id=voice_id, text=text)
         t_tts_done = time.perf_counter()
@@ -95,7 +117,7 @@ class ElevenTTSService:
             "duration_ms": duration_ms,
             "sample_rate": sr,
             "processing_ms": int((time.perf_counter() - t0) * 1000),
-            "model_load_ms": int((t_tts_done - t_model0) * 1000),  # 근사
+            "model_load_ms": int((t_tts_done - t_model0) * 1000),
             "tts_ms": int((t_tts_done - t_model0) * 1000),
         }
         return wav_bytes, metrics
