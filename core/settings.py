@@ -41,8 +41,6 @@ class Settings(BaseSettings):
 
     # 파일 업로드 디렉토리
     UPLOAD_DIR: Path = Path("uploads/voice_samples")
-    PERSONA_DIR: Path = Path("uploads/personas")
-    ONBOARDING_DIR: Path = Path("uploads/onboarding")
 
     model_config = SettingsConfigDict(
         env_file=".env" if is_local() else None,
