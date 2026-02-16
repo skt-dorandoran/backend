@@ -60,5 +60,3 @@ settings = Settings()
 
 # 디렉토리 생성
 settings.UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-settings.PERSONA_DIR.mkdir(parents=True, exist_ok=True)
-settings.ONBOARDING_DIR.mkdir(parents=True, exist_ok=True)
