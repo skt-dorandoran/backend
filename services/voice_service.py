@@ -17,8 +17,25 @@ def _utc_now_iso_z() -> str:
 
 class VoiceService:
     def __init__(self) -> None:
-        self.base_url = settings.ELEVENLABS_BASE_URL.rstrip("/")
+        base_url = settings.ELEVENLABS_BASE_URL.strip()
+        
+        # 빈 문자열이면 기본값 사용
+        if not base_url:
+            base_url = "https://api.elevenlabs.io"
+            # print("⚠️  ELEVENLABS_BASE_URL이 비어있어 기본값 사용")
+        
+        # 프로토콜 확인
+        if not base_url.startswith(('http://', 'https://')):
+            base_url = f"https://{base_url}"
+            # print(f"⚠️  프로토콜이 없어서 추가: {base_url}")
+        
+        self.base_url = base_url.rstrip("/")
         self.api_key = settings.ELEVENLABS_API_KEY
+        
+        # 초기화 확인 (디버깅용, 나중에 제거 가능)
+        # print(f"✅ VoiceService 초기화:")
+        # print(f"   - Base URL: {self.base_url}")
+        # print(f"   - API Key exists: {bool(self.api_key)}")
         
     _in_memory_meta: Dict[str, Dict[str, Any]] = {}
 
