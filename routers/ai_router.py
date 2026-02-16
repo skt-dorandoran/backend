@@ -27,11 +27,13 @@ async def generate_response(request: GenerateResponseRequest):
 class SynthesizeRequest(BaseModel):
     callId: str
     text: str = Field(min_length=1)
-    voiceId: str
+    voiceId: str = Field(..., min_length=1, description="ElevenLabs Voice ID 필수")
     sourceType: Literal["ai_response", "corrected", "typed"]
 
 @router.post("/synthesize-response")
 async def synthesize_response(req: SynthesizeRequest):
+    # print(f"DEBUG: voiceId received: '{req.voiceId}'")
+
     if not req.text.strip():
         raise HTTPException(status_code=400, detail="텍스트 필드는 필수입니다")
 
