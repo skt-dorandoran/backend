@@ -20,7 +20,7 @@ jobs:
           username: ${{ secrets.SERVER_USERNAME }}
           key: ${{ secrets.SERVER_KEY }}
           # script_stop: true
-          envs: APP_DIR,TARGET_BRANCH,REPO_URL,CONTAINER_NAME,IMAGE_NAME,CONTEXT_DIR,DEEPGRAM_API_KEY,DEEPGRAM_ENDPOINTING_MS,DEEPGRAM_LANGUAGE,DEEPGRAM_MODEL,OPENAI_API_KEY,ELEVENLABS_API_KEY
+          envs: APP_DIR,TARGET_BRANCH,REPO_URL,CONTAINER_NAME,IMAGE_NAME,CONTEXT_DIR,DEEPGRAM_API_KEY,DEEPGRAM_ENDPOINTING_MS,DEEPGRAM_LANGUAGE,DEEPGRAM_MODEL,OPENAI_API_KEY,ELEVENLABS_API_KEY,ELEVENLABS_TTS_MODEL_ID,ELEVENLABS_BASE_URL
           script: |
             # stop_script: true 대체(1.0.3 부터 set -e로 대체됨)
             # https://www.inflearn.com/community/questions/1635430/appleboy-ssh-action-stop-script-%EB%8C%80%EC%B2%B4
@@ -93,4 +93,3 @@ jobs:
           DEEPGRAM_API_KEY: ${{ secrets.DEEPGRAM_API_KEY }}
           OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
           ELEVENLABS_API_KEY: ${{ secrets.ELEVENLABS_API_KEY }}
-
