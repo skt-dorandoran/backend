@@ -21,6 +21,9 @@ class ElevenTTSService:
         """
         ElevenLabs TTS convert로 PCM(S16LE) 16kHz raw bytes를 받아온다.
         """
+        if not voice_id or not voice_id.strip():
+            raise ValueError("voice_id cannot be empty")
+    
         if not self.api_key:
             raise ElevenTTSError("ELEVENLABS_API_KEY is empty")
 
