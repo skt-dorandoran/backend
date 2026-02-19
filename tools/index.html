@@ -17,6 +17,11 @@
         #volume-bar { width: 0%; height: 100%; background: #2ecc71; transition: width 0.1s ease; }
 
         #transcript-box { height: 400px; border: 1px solid #dfe6e9; border-radius: 8px; padding: 20px; overflow-y: auto; background: #fff; line-height: 1.8; font-size: 1.1rem; }
+        #event-log-box { height: 180px; border: 1px solid #dfe6e9; border-radius: 8px; padding: 12px; overflow-y: auto; background: #fafafa; font-size: 0.9rem; line-height: 1.5; margin-top: 12px; }
+        .event-log { margin-bottom: 6px; white-space: pre-wrap; }
+        .event-silence { color: #d35400; }
+        .event-comp { color: #8e44ad; }
+        .event-error { color: #c0392b; font-weight: 600; }
         .final { color: var(--final-text); font-weight: 500; margin-bottom: 8px; display: inline-block; padding-right: 5px; }
         .interim { color: var(--interim-text); font-style: italic; }
         
@@ -54,6 +59,7 @@
             <span id="final-part"></span>
             <span id="interim-part" class="interim"></span>
         </div>
+        <div id="event-log-box"></div>
     </div>
 
     <script>
@@ -63,6 +69,7 @@
         let input;
         let analyzer;
         let committed = "";
+        let currentCallId = "";
 
         let lastInterim = "";
         const finalChunks = new Map(); // key: start(ms or rounded sec), value: text
@@ -73,6 +80,23 @@
         const statusText = document.getElementById('status-text');
         const volumeBar = document.getElementById('volume-bar');
         const transcriptBox = document.getElementById('transcript-box');
+        const eventLogBox = document.getElementById('event-log-box');
+
+        function generateCallId() {
+            if (window.crypto && typeof window.crypto.randomUUID === "function") {
+                return `web-${window.crypto.randomUUID()}`;
+            }
+            return `web-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
+        }
+
+        function addEventLog(text, className = "") {
+            const now = new Date().toLocaleTimeString();
+            const el = document.createElement("div");
+            el.className = `event-log ${className}`.trim();
+            el.textContent = `[${now}] ${text}`;
+            eventLogBox.appendChild(el);
+            eventLogBox.scrollTop = eventLogBox.scrollHeight;
+        }
 
         async function initSTT() {
             try {
@@ -106,7 +130,12 @@
                     document.getElementById('placeholder')?.remove();
 
                     // 초기화 메시지 전송
-                    socket.send(JSON.stringify({ sampleRate: 16000 }));
+                    currentCallId = generateCallId();
+                    socket.send(JSON.stringify({
+                        sampleRate: 16000,
+                        callId: currentCallId
+                    }));
+                    addEventLog(`WS 시작: sampleRate=16000, callId=${currentCallId}`);
                 };
 
                 socket.onmessage = (msg) => {
@@ -135,6 +164,29 @@
 
                         document.getElementById("final-part").innerText = committed + " ";
                         document.getElementById("interim-part").innerText = "";
+                        return;
+                    }
+
+                    if (data.type === "silence_detected") {
+                        addEventLog(`침묵 감지: ${data.silenceDuration ?? "-"}초`, "event-silence");
+                        return;
+                    }
+
+                    if (data.type === "comprehension_check") {
+                        const matched = data.keywordMatched ? "Y" : "N";
+                        const dup = data.duplicateDetected ? "Y" : "N";
+                        const ai = data.enableAiCorrection ? "Y" : "N";
+                        const keywords = Array.isArray(data.matchedKeywords) ? data.matchedKeywords.join(", ") : "-";
+                        addEventLog(
+                            `이해 실패 체크 status=${data.status}, matched=${matched}, duplicate=${dup}, count=${data.failureCount}/${data.threshold}, ai=${ai}, keywords=${keywords}`,
+                            "event-comp"
+                        );
+                        return;
+                    }
+
+                    if (data.type === "error") {
+                        addEventLog(`오류: ${data.text || "unknown error"}`, "event-error");
+                        return;
                     }
                 };
 

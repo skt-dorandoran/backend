@@ -2,6 +2,7 @@ import asyncio
 from email.mime import text
 import json
 import time
+import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
 from typing import AsyncIterator, Optional, Tuple
@@ -11,12 +12,15 @@ from fastapi.responses import StreamingResponse
 
 from clients.deepgram_client import DeepgramStreamingClient
 from schemas.stt_schema import StreamEvent, TranscribeDoneResponse
+from schemas.crisis_schema import ComprehensionCheckRequest
+from services.crisis_service import CrisisService
 from core.settings import settings
 
 
 from pykospacing import Spacing
 
 spacing = Spacing()
+crisis_service = CrisisService()
 
 
 def apply_korean_spacing(text: str) -> str:
@@ -265,14 +269,16 @@ async def stream_transcribe_ws(
 
         raw_text = first["text"].strip()
 
-        # 1) JSON 오브젝트 형태: {"sampleRate": 16000, "silenceThreshold": 8.0}
+        # 1) JSON 오브젝트 형태: {"sampleRate": 16000, "silenceThreshold": 8.0, "callId": "..."}
         sr = None
         silence_threshold = None
+        call_id = None
         try:
             obj = json.loads(raw_text)
             if isinstance(obj, dict):
                 sr = obj.get("sampleRate")
                 silence_threshold = obj.get("silenceThreshold")
+                call_id = obj.get("callId")
             elif isinstance(obj, (int, float)):
                 # 2) 숫자 단독 형태: 16000 (JSON number)
                 sr = obj
@@ -290,6 +296,10 @@ async def stream_transcribe_ws(
             return
 
         sample_rate = int(sr)
+        if not isinstance(call_id, str) or not call_id.strip():
+            call_id = f"ws-{uuid.uuid4().hex[:12]}"
+        else:
+            call_id = call_id.strip()
 
         # silenceThreshold 검증 (선택적 파라미터)
         if silence_threshold is not None:
@@ -413,6 +423,18 @@ async def stream_transcribe_ws(
                             "duration": duration,
                             "timestamp": ts,
                             "processingTime": proc_ms,
+                        })
+                        comp = await crisis_service.check_comprehension(
+                            ComprehensionCheckRequest(
+                                callId=call_id,
+                                text=corrected_text,
+                                timestamp=ts,
+                                isFinal=True,
+                            )
+                        )
+                        await client_ws.send_json({
+                            "type": "comprehension_check",
+                            **comp.model_dump(),
                         })
                     else:
                         await client_ws.send_json({
