@@ -46,12 +46,12 @@ async def transcribe_ws(
 # Local Test Functions
 # =============================
 
-from services.stt_service import transcribe_file_batch
+# from services.stt_service import transcribe_file_batch
 
-@router.post("/transcribe/local")
-async def transcribe(
-    file: UploadFile = File(...),
-    language: str | None = Query(default=None),
-    model: str | None = Query(default=None),
-):
-    return await transcribe_file_batch(file, language=language, model=model)
+# @router.post("/transcribe/local")
+# async def transcribe(
+#     file: UploadFile = File(...),
+#     language: str | None = Query(default=None),
+#     model: str | None = Query(default=None),
+# ):
+#     return await transcribe_file_batch(file, language=language, model=model)
