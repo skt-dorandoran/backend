@@ -217,6 +217,12 @@ class CrisisService:
 
         # 임계값 도달
         if current_count >= self.FAILURE_THRESHOLD:
+            # alert를 보낸 뒤 다음 턴부터는 새 카운트로 시작하도록 상태 초기화
+            call_state["failure_count"] = 0
+            call_state["last_keyword"] = None
+            call_state["last_keyword_time"] = None
+            call_state["matched_keywords_history"] = []
+            call_state["last_activity_time"] = current_time
             return ComprehensionCheckResponse(
                 status="alert",
                 callId=request.callId,
