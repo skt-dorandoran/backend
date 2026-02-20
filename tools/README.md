@@ -131,3 +131,25 @@ async def get_test_page():
     --voice-id YOUR_VOICE_ID \              // 클론된 음성의 Elevenlabs 호출 ID
     --text "example" \                      // 출력할 텍스트 문장
     ```
+
+## 스트리밍 테스트
+아래 테스트는 OpenAI API를 요구합니다.
+
+### index-2.html
+간이적인 프론트엔드로 로컬에서 사용자가 문장을 입력하여 openai의 응답 결과와 응답 시간을 확인합니다.
+
+로컬 프론트엔드의 실행을 위해 main.py에서 기존의 @app.get("/") 부분을 주석 처리하고
+```
+@app.get("/")
+def main():
+    return "Goodbye Everyone, Hello SKT FLY AI!"
+```
+
+파일 하단 아래 @app.get("/") 부분의 주석을 해제한 뒤 로컬에서 접속하면 됩니다.
+```
+from fastapi.responses import FileResponse
+
+@app.get("/")
+async def get_test_page():
+    return FileResponse("tools/index-2.html")
+```
