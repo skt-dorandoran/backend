@@ -217,3 +217,8 @@ uploads/
 uploads/*
 uploads/voice_samples/
 response_audio.wav
+.jsonl
+tools/latency_raw_static.jsonl
+tools/latency_raw_streaming.jsonl
+tools/latency_test_static.ipynb
+tools/latency_test_streaming.ipynb

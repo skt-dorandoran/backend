@@ -1,5 +1,5 @@
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import Response
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 from typing import Literal, Optional
 
@@ -17,10 +17,25 @@ tts_service = ElevenTTSService(
 )
 
 
+@router.post("/generate-response-static", response_model=GenerateResponseResponse)
+async def generate_response_static(request: GenerateResponseRequest):
+    try:
+        return await ai_service.generate_response(request)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/generate-response", response_model=GenerateResponseResponse)
 async def generate_response(request: GenerateResponseRequest):
     try:
-        return await ai_service.generate_response(request)
+        return StreamingResponse(
+            ai_service.generate_response_stream(request),
+            media_type="application/json",
+            headers={
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

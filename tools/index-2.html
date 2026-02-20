@@ -1,0 +1,424 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Generate Response: Static vs Stream</title>
+  <style>
+    :root {
+      --bg: #f4efe6;
+      --card: #fffaf3;
+      --ink: #1f1c18;
+      --muted: #6e665c;
+      --accent: #0c6b58;
+      --accent-soft: #d9efe8;
+      --line: #e4d8c8;
+      --danger: #9c2f2f;
+      --mono: "Cascadia Mono", "Consolas", monospace;
+      --sans: "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 28px;
+      font-family: var(--sans);
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 10%, #fff8e6 0%, transparent 45%),
+        radial-gradient(circle at 90% 80%, #e6f6ef 0%, transparent 48%),
+        var(--bg);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      letter-spacing: 0.2px;
+    }
+    p.sub {
+      margin: 0 0 20px;
+      color: var(--muted);
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      background: var(--card);
+      border-radius: 16px;
+      padding: 16px;
+      box-shadow: 0 6px 24px rgba(31, 28, 24, 0.06);
+      margin-bottom: 16px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+    }
+    @media (max-width: 980px) {
+      .grid-2 { grid-template-columns: 1fr; }
+    }
+
+    .field { margin-bottom: 10px; }
+    .field label {
+      display: block;
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 6px;
+      color: var(--muted);
+    }
+    .field input, .field textarea {
+      width: 100%;
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      background: #fff;
+      color: var(--ink);
+    }
+    .field textarea {
+      min-height: 94px;
+      resize: vertical;
+      font-family: var(--mono);
+    }
+
+    .actions {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+    }
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 10px 14px;
+      cursor: pointer;
+      font-weight: 700;
+    }
+    .btn-primary {
+      background: var(--accent);
+      color: #fff;
+    }
+    .btn-secondary {
+      background: #ebe3d7;
+      color: #3e382f;
+    }
+
+    .card-title {
+      font-size: 18px;
+      margin: 0 0 6px;
+    }
+    .badge {
+      display: inline-block;
+      font-size: 12px;
+      padding: 3px 8px;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent);
+      margin-bottom: 10px;
+    }
+    .metrics {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin: 10px 0;
+    }
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 7px 9px;
+      font-size: 12px;
+      background: #fff;
+    }
+    .live {
+      border: 1px dashed #b7a996;
+      border-radius: 10px;
+      background: #fff;
+      min-height: 100px;
+      padding: 10px;
+      white-space: pre-wrap;
+      font-family: var(--mono);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+    .result {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      background: #fff;
+      min-height: 120px;
+      padding: 10px;
+      font-family: var(--mono);
+      font-size: 13px;
+      white-space: pre-wrap;
+      line-height: 1.45;
+    }
+    .error { color: var(--danger); font-weight: 700; }
+  </style>
+</head>
+<body>
+  <h1>Generate Response 비교 테스트</h1>
+  <p class="sub">같은 입력으로 Static(한 번에 반환) vs Stream(조각 단위 수신) 체감 차이를 확인합니다.</p>
+
+  <section class="panel">
+    <div class="field">
+      <label for="baseUrl">Base URL</label>
+      <input id="baseUrl" value="http://127.0.0.1:8000/api/v1/ai" />
+    </div>
+    <div class="grid-2">
+      <div class="field">
+        <label for="callId">callId</label>
+        <input id="callId" value="demo-call-001" />
+      </div>
+      <div class="field">
+        <label for="userSpeech">userSpeech</label>
+        <input id="userSpeech" value="네, 병원 예약 시간을 다시 확인하고 싶어요." />
+      </div>
+    </div>
+    <div class="field">
+      <label for="history">conversationHistory (JSON Array)</label>
+      <textarea id="history">[
+  { "role": "other", "text": "무엇을 도와드릴까요?" },
+  { "role": "user", "text": "예약 관련해서 문의드려요." }
+]</textarea>
+    </div>
+    <div class="actions">
+      <button id="runBtn" class="btn-primary">동시 실행</button>
+      <button id="clearBtn" class="btn-secondary">초기화</button>
+    </div>
+  </section>
+
+  <section class="grid-2">
+    <article class="panel">
+      <h2 class="card-title">Static /generate-response-static</h2>
+      <span class="badge">한 번에 응답</span>
+      <div class="metrics">
+        <div class="metric" id="staticStatus">상태: 대기</div>
+        <div class="metric" id="staticTtfb">TTFB: -</div>
+        <div class="metric" id="staticDone">완료: -</div>
+      </div>
+      <div class="result" id="staticResult"></div>
+    </article>
+
+    <article class="panel">
+      <h2 class="card-title">Stream /generate-response</h2>
+      <span class="badge">chunk 단위 수신</span>
+      <div class="metrics">
+        <div class="metric" id="streamStatus">상태: 대기</div>
+        <div class="metric" id="streamTtfb">TTFB: -</div>
+        <div class="metric" id="streamDone">완료: -</div>
+        <div class="metric" id="streamChunks">chunks: 0</div>
+      </div>
+      <div class="field">
+        <label>실시간 수신(raw)</label>
+        <div class="live" id="streamLive"></div>
+      </div>
+      <div class="field">
+        <label>최종 파싱 결과(JSON)</label>
+        <div class="result" id="streamResult"></div>
+      </div>
+    </article>
+  </section>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+
+    const ui = {
+      runBtn: $("runBtn"),
+      clearBtn: $("clearBtn"),
+      baseUrl: $("baseUrl"),
+      callId: $("callId"),
+      userSpeech: $("userSpeech"),
+      history: $("history"),
+      staticStatus: $("staticStatus"),
+      staticTtfb: $("staticTtfb"),
+      staticDone: $("staticDone"),
+      staticResult: $("staticResult"),
+      streamStatus: $("streamStatus"),
+      streamTtfb: $("streamTtfb"),
+      streamDone: $("streamDone"),
+      streamChunks: $("streamChunks"),
+      streamLive: $("streamLive"),
+      streamResult: $("streamResult"),
+    };
+
+    function resetOutput() {
+      ui.staticStatus.textContent = "상태: 대기";
+      ui.staticTtfb.textContent = "TTFB: -";
+      ui.staticDone.textContent = "완료: -";
+      ui.staticResult.textContent = "";
+      ui.streamStatus.textContent = "상태: 대기";
+      ui.streamTtfb.textContent = "TTFB: -";
+      ui.streamDone.textContent = "완료: -";
+      ui.streamChunks.textContent = "chunks: 0";
+      ui.streamLive.textContent = "";
+      ui.streamResult.textContent = "";
+    }
+
+    function payloadFromForm() {
+      let history;
+      try {
+        history = JSON.parse(ui.history.value);
+        if (!Array.isArray(history)) throw new Error("Array여야 합니다.");
+      } catch (e) {
+        throw new Error("conversationHistory JSON 파싱 실패: " + e.message);
+      }
+      return {
+        callId: ui.callId.value.trim(),
+        userSpeech: ui.userSpeech.value.trim(),
+        conversationHistory: history,
+      };
+    }
+
+    function extractLiveResponseTexts(rawJsonLikeText) {
+      const out = [];
+      const marker = /"text"\s*:\s*"/g;
+      let match;
+      while ((match = marker.exec(rawJsonLikeText)) !== null) {
+        let i = marker.lastIndex;
+        let text = "";
+        let escaped = false;
+        let complete = false;
+
+        while (i < rawJsonLikeText.length) {
+          const ch = rawJsonLikeText[i];
+          if (escaped) {
+            text += ch;
+            escaped = false;
+          } else if (ch === "\\") {
+            escaped = true;
+          } else if (ch === "\"") {
+            complete = true;
+            i += 1;
+            break;
+          } else {
+            text += ch;
+          }
+          i += 1;
+        }
+
+        marker.lastIndex = i;
+        out.push({
+          text: text.replace(/\\n/g, "\n").replace(/\\"/g, "\"").replace(/\\\\/g, "\\"),
+          complete,
+        });
+      }
+
+      return out;
+    }
+
+    function renderResponseTexts(items, withCursor) {
+      if (!items.length) return "";
+      return items
+        .map((it, idx) => `response_${idx + 1}: ${it.text}${withCursor && !it.complete ? "▌" : ""}`)
+        .join("\n\n");
+    }
+
+    async function runStatic(baseUrl, payload) {
+      const started = performance.now();
+      ui.staticStatus.textContent = "상태: 요청 중";
+      const res = await fetch(baseUrl + "/generate-response-static", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const ttfb = performance.now() - started;
+      ui.staticTtfb.textContent = "TTFB: " + ttfb.toFixed(1) + "ms";
+
+      const text = await res.text();
+      const doneMs = performance.now() - started;
+      ui.staticDone.textContent = "완료: " + doneMs.toFixed(1) + "ms";
+
+      if (!res.ok) {
+        ui.staticStatus.textContent = "상태: 실패 (" + res.status + ")";
+        ui.staticResult.innerHTML = '<span class="error">' + text + "</span>";
+        return;
+      }
+
+      ui.staticStatus.textContent = "상태: 성공";
+      try {
+        const obj = JSON.parse(text);
+        const items = (obj.responses || []).map((r) => ({ text: r.text || "", complete: true }));
+        ui.staticResult.textContent = renderResponseTexts(items, false);
+      } catch {
+        ui.staticResult.textContent = text;
+      }
+    }
+
+    async function runStream(baseUrl, payload) {
+      const started = performance.now();
+      ui.streamStatus.textContent = "상태: 요청 중";
+      let firstChunk = false;
+      let chunkCount = 0;
+
+      const res = await fetch(baseUrl + "/generate-response", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        ui.streamStatus.textContent = "상태: 실패 (" + res.status + ")";
+        ui.streamResult.innerHTML = '<span class="error">' + (await res.text()) + "</span>";
+        return;
+      }
+
+      if (!res.body) {
+        ui.streamStatus.textContent = "상태: 실패 (ReadableStream 없음)";
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let fullText = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (!firstChunk) {
+          firstChunk = true;
+          ui.streamTtfb.textContent = "TTFB: " + (performance.now() - started).toFixed(1) + "ms";
+          ui.streamStatus.textContent = "상태: 수신 중";
+        }
+
+        const chunk = decoder.decode(value, { stream: true });
+        fullText += chunk;
+        chunkCount += 1;
+        ui.streamChunks.textContent = "chunks: " + chunkCount;
+        const liveItems = extractLiveResponseTexts(fullText);
+        ui.streamLive.textContent = renderResponseTexts(liveItems, true) || fullText;
+      }
+
+      const doneMs = performance.now() - started;
+      ui.streamDone.textContent = "완료: " + doneMs.toFixed(1) + "ms";
+      ui.streamStatus.textContent = "상태: 성공";
+
+      try {
+        const obj = JSON.parse(fullText);
+        const items = (obj.responses || []).map((r) => ({ text: r.text || "", complete: true }));
+        ui.streamResult.textContent = renderResponseTexts(items, false);
+      } catch (e) {
+        ui.streamResult.innerHTML = '<span class="error">최종 JSON 파싱 실패: ' + e.message + "</span>";
+      }
+    }
+
+    ui.runBtn.addEventListener("click", async () => {
+      resetOutput();
+      ui.runBtn.disabled = true;
+      try {
+        const payload = payloadFromForm();
+        const base = ui.baseUrl.value.trim().replace(/\/+$/, "");
+        await Promise.allSettled([
+          runStatic(base, payload),
+          runStream(base, payload),
+        ]);
+      } catch (e) {
+        ui.staticResult.innerHTML = '<span class="error">' + e.message + "</span>";
+        ui.streamResult.innerHTML = '<span class="error">' + e.message + "</span>";
+      } finally {
+        ui.runBtn.disabled = false;
+      }
+    });
+
+    ui.clearBtn.addEventListener("click", resetOutput);
+  </script>
+</body>
+</html>

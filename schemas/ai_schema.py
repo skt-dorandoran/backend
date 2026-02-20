@@ -17,7 +17,7 @@ class GenerateResponseRequest(BaseModel):
 class ResponseItem(BaseModel):
     id: str
     text: str
-    tone: Literal["friendly", "formal", "casual", "professional"]
+    tone: Literal["friendly", "formal", "casual", "professional", "polite"]
     priority: int = Field(ge=1, le=3)
 
 
