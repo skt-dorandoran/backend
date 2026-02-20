@@ -82,7 +82,7 @@ class CrisisService:
     _call_states: Dict[str, Dict[str, Any]] = {}
 
     # 설정값
-    FAILURE_THRESHOLD = 3  # 임계값
+    FAILURE_THRESHOLD = 2  # 임계값
     DUPLICATE_WINDOW_SECONDS = 10  # 중복 검사 시간 (초)
     RESET_TIMEOUT_SECONDS = 120  # 2분간 미감지 시 리셋
 

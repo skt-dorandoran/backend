@@ -6,7 +6,7 @@ WebSocket STT API + 침묵 감지 기능 테스트
 2. 이 스크립트 실행: python tools/test_ws_silence_detection.py
 
 침묵 감지 테스트:
-- 8초간 말하지 않으면 "silence_detected" 이벤트가 발생합니다.
+- 3초간 말하지 않으면 "silence_detected" 이벤트가 발생합니다.
 - 다시 말하면 타이머가 리셋됩니다.
 """
 
@@ -28,7 +28,7 @@ CHUNK = 8000  # 0.5초 단위
 WS_URL = "ws://127.0.0.1:8000/api/v1/speech/transcribe/ws"
 
 # 침묵 감지 설정 (None이면 비활성화)
-SILENCE_THRESHOLD = 8.0  # 8초간 침묵 시 알림
+SILENCE_THRESHOLD = 3.0  # 3초간 침묵 시 알림
 
 
 async def mic_stream_generator(stop_event):
@@ -135,7 +135,7 @@ if __name__ == "__main__":
     print(f"침묵 감지 임계값: {SILENCE_THRESHOLD}초 (None이면 비활성화)")
     print("\n침묵 감지 테스트 방법:")
     print("  1. 말하기 시작")
-    print("  2. 8초간 침묵 유지")
+    print("  2. 3초간 침묵 유지")
     print("  3. 'silence_detected' 이벤트 확인")
     print("  4. 다시 말하면 타이머 리셋 확인")
     print("\n침묵 감지 비활성화 테스트:")

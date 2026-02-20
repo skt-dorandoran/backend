@@ -55,7 +55,7 @@ python -m tools.test_mic_realtime
 python -m uvicorn main:app --reload
 ```
 
-- 기본 실행 (침묵 감지 활성화: 8초)
+- 기본 실행 (침묵 감지 활성화: 3초)
     ```bash
     # 터미널 2: 테스트 실행
     python tools/test_ws_silence_detection.py
@@ -63,8 +63,8 @@ python -m uvicorn main:app --reload
 
 - 설정 변경: 파일 내부 `SILENCE_THRESHOLD` 값 수정
     ```python
-    # 침묵 감지 활성화 (5~N초)
-    SILENCE_THRESHOLD = 8.0  # 8초간 침묵 시 알림
+    # 침묵 감지 활성화 (3~N초)
+    SILENCE_THRESHOLD = 3.0  # 3초간 침묵 시 알림
 
     # 침묵 감지 비활성화
     SILENCE_THRESHOLD = None  # 침묵 감지 기능 꺼짐
@@ -72,7 +72,7 @@ python -m uvicorn main:app --reload
 
 - 테스트 시나리오
     1. 마이크로 말하기 → STT 결과 확인
-    2. 8초간 침묵 유지 → `silence_detected` 이벤트 확인
+    2. 3초간 침묵 유지 → `silence_detected` 이벤트 확인
     3. 다시 말하기 → 타이머 리셋 확인
 
 **주의사항**:
