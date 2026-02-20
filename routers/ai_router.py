@@ -4,7 +4,12 @@ from pydantic import BaseModel, Field
 from typing import Literal, Optional
 
 from core.settings import settings
-from schemas.ai_schema import GenerateResponseRequest, GenerateResponseResponse
+from schemas.ai_schema import (
+    GenerateResponseRequest,
+    GenerateResponseResponse,
+    CorrectSpeechRequest,
+    CorrectSpeechResponse,
+)
 from services.ai_service import AIService
 from services.tts_service import ElevenTTSService, ElevenTTSError
 
@@ -21,6 +26,14 @@ tts_service = ElevenTTSService(
 async def generate_response(request: GenerateResponseRequest):
     try:
         return await ai_service.generate_response(request)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/correct-speech", response_model=CorrectSpeechResponse)
+async def correct_speech(request: CorrectSpeechRequest):
+    try:
+        return await ai_service.correct_speech(request)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
