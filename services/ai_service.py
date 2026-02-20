@@ -12,6 +12,8 @@ from schemas.ai_schema import (
     GenerateResponseRequest,
     GenerateResponseResponse,
     ResponseItem,
+    CorrectSpeechRequest,
+    CorrectSpeechResponse,
 )
 
 
@@ -43,6 +45,41 @@ SYSTEM_PROMPT = """
 - polite: 공손하고 예의바른 톤
 
 반드시 JSON 형식으로만 응답하세요.
+"""
+
+CORRECT_SPEECH_SYSTEM_PROMPT = """
+당신은 구음장애(조음장애) 사용자의 불명확한 발음을 교정하는 전문 어시스턴트입니다.
+WhisperX STT가 인식한 깨진 텍스트를 대화 맥락을 참고하여 원래 의도한 자연스러운 한국어 문장으로 복원합니다.
+
+# 교정 원칙
+- 대화 맥락(conversationHistory)을 반드시 참고하여 문맥에 맞는 문장으로 교정
+- 원본 텍스트의 발음 패턴을 분석하여 가장 가능성 높은 문장을 추론
+- 교정된 문장은 자연스러운 한국어 구어체여야 함
+- 원본과 큰 차이가 없으면 그대로 유지
+- confidence는 교정 결과에 대한 신뢰도 (0.0~1.0)
+  - 1.0: 확실한 교정
+  - 0.7~0.9: 높은 확신
+  - 0.4~0.6: 중간 확신 (여러 해석 가능)
+  - 0.0~0.3: 낮은 확신 (추측에 가까움)
+
+반드시 JSON 형식으로만 응답하세요.
+"""
+
+CORRECT_SPEECH_USER_TEMPLATE = """
+# 대화 맥락
+{conversation_context}
+
+# STT 인식 결과 (교정 대상)
+"{raw_text}"
+
+# 요청
+위 STT 결과를 대화 맥락을 참고하여 원래 의도한 자연스러운 한국어 문장으로 교정해주세요.
+
+JSON 형식:
+{{
+  "correctedText": "교정된 텍스트",
+  "confidence": 0.85
+}}
 """
 
 USER_PROMPT_TEMPLATE = """
@@ -260,3 +297,41 @@ class AIService:
             + "}"
         )
         yield suffix.encode("utf-8")
+
+    async def correct_speech(self, request: CorrectSpeechRequest) -> CorrectSpeechResponse:
+        start_time = time.time()
+
+        conversation_context = _build_conversation_context(request.conversationHistory)
+
+        user_prompt = CORRECT_SPEECH_USER_TEMPLATE.format(
+            conversation_context=conversation_context,
+            raw_text=request.rawText,
+        )
+
+        completion = await self._client.chat.completions.create(
+            model=settings.OPENAI_MODEL,
+            messages=[
+                {"role": "system", "content": CORRECT_SPEECH_SYSTEM_PROMPT},
+                {"role": "user", "content": user_prompt},
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.3,
+            max_tokens=300,
+        )
+
+        raw = json.loads(completion.choices[0].message.content)
+
+        corrected_text = raw.get("correctedText", request.rawText)
+        confidence = max(0.0, min(1.0, float(raw.get("confidence", 0.0))))
+
+        processing_time = int((time.time() - start_time) * 1000)
+
+        return CorrectSpeechResponse(
+            callId=request.callId,
+            correctedText=corrected_text,
+            rawText=request.rawText,
+            confidence=confidence,
+            processingTime=processing_time,
+            message="발화 교정이 완료되었습니다",
+            timestamp=_utc_now_iso_z(),
+        )
