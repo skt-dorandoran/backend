@@ -244,6 +244,8 @@ async def stream_transcribe_ws(
     await client_ws.accept()
     # print("accepted")
 
+    SILENCE_THRESHOLD_MIN = 3.0
+
     # 세션 기준 타이머
     session_start = time.perf_counter()
 
@@ -269,7 +271,7 @@ async def stream_transcribe_ws(
 
         raw_text = first["text"].strip()
 
-        # 1) JSON 오브젝트 형태: {"sampleRate": 16000, "silenceThreshold": 8.0, "callId": "..."}
+        # 1) JSON 오브젝트 형태: {"sampleRate": 16000, "silenceThreshold": 3.0, "callId": "..."}
         sr = None
         silence_threshold = None
         call_id = None
@@ -290,7 +292,7 @@ async def stream_transcribe_ws(
         if not isinstance(sr, (int, float)) or sr <= 0:
             await client_ws.send_json({
                 "type": "error",
-                "text": "Invalid sampleRate. Example: {\"sampleRate\":16000, \"silenceThreshold\":8.0}"
+                "text": "Invalid sampleRate. Example: {\"sampleRate\":16000, \"silenceThreshold\":3.0}"
             })
             await client_ws.close()
             return
@@ -303,10 +305,10 @@ async def stream_transcribe_ws(
 
         # silenceThreshold 검증 (선택적 파라미터)
         if silence_threshold is not None:
-            if not isinstance(silence_threshold, (int, float)) or silence_threshold < 5.0:
+            if not isinstance(silence_threshold, (int, float)) or silence_threshold < SILENCE_THRESHOLD_MIN:
                 await client_ws.send_json({
                     "type": "error",
-                    "text": "silenceThreshold must be >= 5.0 seconds"
+                    "text": f"silenceThreshold must be >= {SILENCE_THRESHOLD_MIN} seconds"
                 })
                 await client_ws.close()
                 return
