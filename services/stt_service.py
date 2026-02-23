@@ -248,6 +248,7 @@ async def stream_transcribe_ws(
 
     # 세션 기준 타이머
     session_start = time.perf_counter()
+    event_sequence = 0
 
     if not settings.DEEPGRAM_API_KEY:
         await client_ws.send_json(StreamEvent(type="error", text="DEEPGRAM_API_KEY is not set").model_dump())
@@ -335,10 +336,15 @@ async def stream_transcribe_ws(
     ) as dg:
 
         stop_event = asyncio.Event()
+        utterance_index = 1
+        utterance_revision = 0
 
         # 침묵 감지 상태 (silenceThreshold가 설정된 경우에만 사용)
         last_speech_time = time.perf_counter() if silence_threshold else None
         silence_detected_sent = False
+
+        def _current_utterance_id() -> str:
+            return f"{call_id}-utt-{utterance_index}"
 
         async def silence_monitor():
             """침묵 감지 모니터링 태스크 (silenceThreshold 설정 시에만 실행)"""
@@ -394,6 +400,7 @@ async def stream_transcribe_ws(
 
         async def dg_to_client():
             nonlocal last_speech_time, silence_detected_sent
+            nonlocal event_sequence, utterance_index, utterance_revision
 
             try:
                 async for dg_msg in dg.recv_events():
@@ -413,9 +420,14 @@ async def stream_transcribe_ws(
                     # 서버 기준 시간/처리시간
                     ts = _utc_now_iso()
                     proc_ms = int((time.perf_counter() - session_start) * 1000)
+                    event_sequence += 1
 
                     if is_final:
                         corrected_text = apply_korean_spacing(text)
+                        utterance_revision += 1
+                        current_utterance_id = _current_utterance_id()
+                        is_end_of_utterance = bool(speech_final)
+
                         await client_ws.send_json({
                             "type": "final",
                             "text": corrected_text,
@@ -425,6 +437,16 @@ async def stream_transcribe_ws(
                             "duration": duration,
                             "timestamp": ts,
                             "processingTime": proc_ms,
+                            # backward-compatible + richer metadata
+                            "eventId": f"{call_id}:{event_sequence}",
+                            "sequence": event_sequence,
+                            "sessionId": call_id,
+                            "utteranceId": current_utterance_id,
+                            "revision": utterance_revision,
+                            "isFinal": True,
+                            "is_final": True,
+                            "isEndOfUtterance": is_end_of_utterance,
+                            "endpointReason": "speech_final" if is_end_of_utterance else "segment_final",
                         })
                         comp = await crisis_service.check_comprehension(
                             ComprehensionCheckRequest(
@@ -438,7 +460,12 @@ async def stream_transcribe_ws(
                             "type": "comprehension_check",
                             **comp.model_dump(),
                         })
+
+                        if is_end_of_utterance:
+                            utterance_index += 1
+                            utterance_revision = 0
                     else:
+                        utterance_revision += 1
                         await client_ws.send_json({
                             "type": "interim",
                             "text": text,
@@ -447,6 +474,16 @@ async def stream_transcribe_ws(
                             "duration": duration,
                             "timestamp": ts,
                             "processingTime": proc_ms,
+                            # backward-compatible + richer metadata
+                            "eventId": f"{call_id}:{event_sequence}",
+                            "sequence": event_sequence,
+                            "sessionId": call_id,
+                            "utteranceId": _current_utterance_id(),
+                            "revision": utterance_revision,
+                            "isFinal": False,
+                            "is_final": False,
+                            "isEndOfUtterance": False,
+                            "endpointReason": None,
                         })
             except Exception as e:
                 print(f"[DG -> Client 에러] {e}")
