@@ -1,0 +1,153 @@
+import { WebSocketServer } from "ws";
+import { randomUUID } from "crypto";
+
+const wss = new WebSocketServer({ port: 8080 });
+
+const rooms = new Map(); // roomId -> Set<ws>  (for legacy join/broadcast)
+const subscribers = new Map(); // roomId -> Set<ws> (those waiting to receive incoming calls)
+const calls = new Map(); // callId -> { caller, callee, roomId, status }
+
+function safeSend(ws, obj) {
+  if (ws && ws.readyState === ws.OPEN) ws.send(JSON.stringify(obj));
+}
+
+function addToSetMap(map, key, value) {
+  if (!map.has(key)) map.set(key, new Set());
+  map.get(key).add(value);
+}
+
+function removeFromSetMap(map, key, value) {
+  const s = map.get(key);
+  if (!s) return;
+  s.delete(value);
+  if (s.size === 0) map.delete(key);
+}
+
+wss.on("connection", (ws) => {
+  ws.roomId = null;
+  ws.subscribedRooms = new Set();
+  ws.currentCallId = null;
+
+  ws.on("message", (data) => {
+    let msg;
+    try {
+      msg = JSON.parse(data.toString());
+    } catch {
+      return;
+    }
+
+    const { type, roomId, callId } = msg;
+
+    // Legacy: join a room for simple broadcasts
+    if (type === "join") {
+      if (ws.roomId) removeFromSetMap(rooms, ws.roomId, ws);
+      ws.roomId = roomId;
+      addToSetMap(rooms, roomId, ws);
+      safeSend(ws, { type: "joined", roomId, peers: rooms.get(roomId).size - 1 });
+      return;
+    }
+
+    // subscribe: add to the recipients of incoming calls for the room
+    if (type === "subscribe") {
+      if (!roomId) return;
+      addToSetMap(subscribers, roomId, ws);
+      ws.subscribedRooms.add(roomId);
+      safeSend(ws, { type: "subscribed", roomId });
+      return;
+    }
+
+    // call: create callId, store caller, notify subscribers via incoming
+    if (type === "call") {
+      if (!roomId) return;
+      const id = randomUUID();
+      calls.set(id, { caller: ws, callee: null, roomId, status: "ringing" });
+      ws.currentCallId = id;
+
+      const subs = subscribers.get(roomId);
+      if (subs) {
+        for (const sub of subs) {
+          // notify all subscribers in room about incoming
+          safeSend(sub, { type: "incoming", roomId, callId: id });
+        }
+      }
+      return;
+    }
+
+    // accept: callee accepts a specific callId
+    if (type === "accept") {
+      if (!callId) return;
+      const call = calls.get(callId);
+      if (!call) return;
+      // ensure accepter is subscribed to the same room
+      if (call.roomId && !ws.subscribedRooms.has(call.roomId)) return;
+      call.callee = ws;
+      call.status = "active";
+      ws.currentCallId = callId;
+      // notify caller that callee joined
+      safeSend(call.caller, { type: "callee_joined", callId });
+      return;
+    }
+
+    // reject: callee rejects the call
+    if (type === "reject") {
+      if (!callId) return;
+      const call = calls.get(callId);
+      if (!call) return;
+      call.status = "rejected";
+      // notify caller
+      safeSend(call.caller, { type: "rejected", callId });
+      // cleanup
+      if (call.caller) call.caller.currentCallId = null;
+      if (call.callee) call.callee.currentCallId = null;
+      calls.delete(callId);
+      return;
+    }
+
+    // Relay only between caller and callee for offer/answer/ice when callId provided
+    if (callId && (type === "offer" || type === "answer" || type === "ice")) {
+      const call = calls.get(callId);
+      if (!call) return;
+      // from caller -> to callee
+      if (call.caller === ws && call.callee) {
+        safeSend(call.callee, msg);
+        return;
+      }
+      // from callee -> to caller
+      if (call.callee === ws && call.caller) {
+        safeSend(call.caller, msg);
+        return;
+      }
+      // If callee not set yet but caller is sending offer, ignore until callee_joined
+      return;
+    }
+
+    // Fallback: broadcast to same room (legacy behavior)
+    if (!ws.roomId) return;
+    const peers = rooms.get(ws.roomId);
+    if (!peers) return;
+    for (const peer of peers) {
+      if (peer !== ws) safeSend(peer, msg);
+    }
+  });
+
+  ws.on("close", () => {
+    // remove from legacy rooms
+    if (ws.roomId) removeFromSetMap(rooms, ws.roomId, ws);
+    // remove from subscribers
+    for (const r of ws.subscribedRooms) removeFromSetMap(subscribers, r, ws);
+
+    // cleanup any active or ringing call this socket participated in
+    const cid = ws.currentCallId;
+    if (cid) {
+      const call = calls.get(cid);
+      if (call) {
+        const other = call.caller === ws ? call.callee : call.caller;
+        if (other) safeSend(other, { type: "rejected", callId: cid });
+        calls.delete(cid);
+      }
+      ws.currentCallId = null;
+    }
+  });
+});
+
+console.log("Signaling server listening on :8080");

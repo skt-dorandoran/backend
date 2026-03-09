@@ -1,0 +1,16 @@
+# location 밖(서버 블록 상단)에 추가
+resolver 127.0.0.11 valid=10s ipv6=off;
+
+location / {
+  set $upstream webrtc_signaling;
+  proxy_pass http://$upstream:8080;
+
+  proxy_http_version 1.1;
+  proxy_set_header Upgrade $http_upgrade;
+  proxy_set_header Connection "upgrade";
+  proxy_set_header Host $host;
+
+  # 선택: 장시간 통화 대비 타임아웃
+  proxy_read_timeout 3600s;
+  proxy_send_timeout 3600s;
+}

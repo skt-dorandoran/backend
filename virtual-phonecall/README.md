@@ -86,7 +86,7 @@
             proxy_set_header Host $host;
         }
         ```
-    - 프론트엔드 코드 수정 (기존 -> HTTPS 대응 수정)
+    - 프론트엔드 수정
         ```
         const SIGNALING_URL = "ws://YOUR_SERVER_IP:8080";
         ```

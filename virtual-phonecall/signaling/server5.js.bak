@@ -2,12 +2,15 @@ import { WebSocketServer } from "ws";
 import { randomUUID } from "crypto";
 import http from "http";
 
+// Create an HTTP server so plain HTTP probes (and health checks) succeed
+// and the ws server can share the same port cleanly under proxy.
 const httpServer = http.createServer((req, res) => {
   if (req.url === "/health") {
     res.writeHead(200, { "Content-Type": "text/plain" });
     res.end("ok");
     return;
   }
+  // optional root response
   res.writeHead(200, { "Content-Type": "text/plain" });
   res.end("WebSocket signaling server\n");
 });
@@ -15,9 +18,9 @@ const httpServer = http.createServer((req, res) => {
 const wss = new WebSocketServer({ server: httpServer });
 httpServer.listen(8080);
 
-const rooms = new Map();        // roomId -> Set<ws> (legacy)
-const subscribers = new Map();  // roomId -> Set<ws>
-const calls = new Map();        // callId -> call object
+const rooms = new Map(); // roomId -> Set<ws> (legacy)
+const subscribers = new Map(); // roomId -> Set<ws>
+const calls = new Map(); // callId -> call object
 
 function safeSend(ws, obj) {
   if (ws && ws.readyState === ws.OPEN) {
@@ -57,10 +60,6 @@ function cleanupCall(callId, reasonType = "rejected") {
   calls.delete(callId);
 }
 
-function isParticipant(call, ws) {
-  return call && (call.caller === ws || call.callee === ws);
-}
-
 wss.on("connection", (ws) => {
   ws.roomId = null;
   ws.subscribedRooms = new Set();
@@ -77,7 +76,7 @@ wss.on("connection", (ws) => {
     const { type, roomId, callId, role } = msg;
     console.log("RECV:", type, roomId || "", callId || "");
 
-    // Legacy join
+    // Legacy join (optionally bind to a call if callId+role provided)
     if (type === "join") {
       if (ws.roomId) removeFromSetMap(rooms, ws.roomId, ws);
       ws.roomId = roomId;
@@ -111,7 +110,7 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    // Subscribe
+    // Subscribe to incoming calls
     if (type === "subscribe") {
       if (!roomId) return;
       addToSetMap(subscribers, roomId, ws);
@@ -120,14 +119,13 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    // Create call
+    // Create call (use client-provided callId if present)
     if (type === "call") {
       if (!roomId) return;
 
       const id = callId || randomUUID();
       const callerNumber = msg.callerNumber || "";
       const calleeNumber = msg.calleeNumber || "";
-
       let call = calls.get(id);
       if (!call) {
         call = {
@@ -157,7 +155,7 @@ wss.on("connection", (ws) => {
       const subs = subscribers.get(roomId);
       if (subs) {
         for (const sub of subs) {
-          if (sub !== ws) {
+          if (sub !== ws)
             safeSend(sub, {
               type: "incoming",
               roomId,
@@ -165,13 +163,12 @@ wss.on("connection", (ws) => {
               callerNumber: call.callerNumber || "",
               calleeNumber: call.calleeNumber || ""
             });
-          }
         }
       }
       return;
     }
 
-    // Accept
+    // Accept call (callee)
     if (type === "accept") {
       if (!callId) return;
       const call = calls.get(callId);
@@ -186,11 +183,13 @@ wss.on("connection", (ws) => {
 
       safeSend(call.caller, { type: "callee_joined", callId });
 
+      // Flush buffered signaling to callee
       if (call.pendingOffer) safeSend(call.callee, call.pendingOffer);
       for (const ice of call.pendingCallerIce) safeSend(call.callee, ice);
       call.pendingOffer = null;
       call.pendingCallerIce.length = 0;
 
+      // Flush buffered signaling to caller (if any)
       if (call.pendingAnswer) safeSend(call.caller, call.pendingAnswer);
       for (const ice of call.pendingCalleeIce) safeSend(call.caller, ice);
       call.pendingAnswer = null;
@@ -199,44 +198,37 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    // Reject
+    // Reject call
     if (type === "reject") {
       if (!callId) return;
       cleanupCall(callId, "rejected");
       return;
     }
 
-    // Hangup (participants only + callee 미연결 시 subscriber 알림)
+    // Hangup (optional)
     if (type === "hangup") {
       if (!callId) return;
       const call = calls.get(callId);
-      if (!call) return;
-      if (!isParticipant(call, ws)) return;
-
-      if (call.caller && call.caller !== ws) safeSend(call.caller, { type: "hangup", callId });
-      if (call.callee && call.callee !== ws) safeSend(call.callee, { type: "hangup", callId });
-
-      if (!call.callee && call.roomId) {
+      // Broadcast hangup to subscribers in the room
+      if (call && call.roomId) {
         const subs = subscribers.get(call.roomId);
         if (subs) {
           for (const sub of subs) {
-            if (sub !== ws) {
-              safeSend(sub, { type: "hangup", roomId: call.roomId, callId });
-            }
+            if (sub !== ws) safeSend(sub, { type: "hangup", roomId: call.roomId, callId });
           }
         }
       }
-
+      // ensure callers/callees are cleaned up and notified
       cleanupCall(callId, "hangup");
       return;
     }
 
-    // Signaling relay (STRICT ACL)
+    // Signaling relay with buffering
     if (callId && (type === "offer" || type === "answer" || type === "ice")) {
       const call = calls.get(callId);
       if (!call) return;
-      if (!isParticipant(call, ws)) return;
 
+      // Caller -> Callee
       if (call.caller === ws) {
         if (type === "offer") {
           if (call.callee) safeSend(call.callee, msg);
@@ -248,9 +240,11 @@ wss.on("connection", (ws) => {
           else call.pendingCallerIce.push(msg);
           return;
         }
+        // caller shouldn't send answer
         return;
       }
 
+      // Callee -> Caller
       if (call.callee === ws) {
         if (type === "answer") {
           if (call.caller) safeSend(call.caller, msg);
@@ -262,13 +256,14 @@ wss.on("connection", (ws) => {
           else call.pendingCalleeIce.push(msg);
           return;
         }
+        // callee shouldn't send offer
         return;
       }
 
       return;
     }
 
-    // Legacy fallback (minimal)
+    // Legacy room broadcast fallback
     if (!ws.roomId) return;
     const peers = rooms.get(ws.roomId);
     if (!peers) return;
@@ -278,14 +273,24 @@ wss.on("connection", (ws) => {
   });
 
   ws.on("close", () => {
+    // remember room before removal
     const myRoom = ws.roomId;
 
+    // remove from legacy rooms
     if (myRoom) removeFromSetMap(rooms, myRoom, ws);
 
+    // remove from subscribers and notify remaining subscribers that a peer left
     for (const r of ws.subscribedRooms) {
       removeFromSetMap(subscribers, r, ws);
+      const subs = subscribers.get(r);
+      if (subs) {
+        for (const sub of subs) {
+          if (sub !== ws) safeSend(sub, { type: "peer_left", roomId: r });
+        }
+      }
     }
 
+    // notify legacy room peers
     if (myRoom) {
       const peers = rooms.get(myRoom);
       if (peers) {
@@ -295,22 +300,22 @@ wss.on("connection", (ws) => {
       }
     }
 
+    // cleanup any active or ringing call this socket participated in
     const cid = ws.currentCallId;
     if (cid) {
       const call = calls.get(cid);
       if (call) {
         const other = call.caller === ws ? call.callee : call.caller;
         if (other) {
+          // notify the other participant that this peer hung up
           safeSend(other, { type: "hangup", roomId: call.roomId, callId: cid });
         } else {
-          if (call.roomId) {
-            const subs = subscribers.get(call.roomId);
-            if (subs) {
-              for (const sub of subs) {
-                if (sub !== ws) {
-                  safeSend(sub, { type: "hangup", roomId: call.roomId, callId: cid });
-                }
-              }
+          // no direct other participant yet (caller disconnected before callee accepted)
+          // broadcast hangup to any subscribers in the room so callers see call ended
+          const subs = subscribers.get(call.roomId);
+          if (subs) {
+            for (const sub of subs) {
+              if (sub !== ws) safeSend(sub, { type: "hangup", roomId: call.roomId, callId: cid });
             }
           }
         }
@@ -323,7 +328,8 @@ wss.on("connection", (ws) => {
 
 console.log("Signaling server listening on :8080");
 
-function notifyAllAndClose() {
+// Graceful shutdown: notify all active calls' peers before exit
+function notifyAllAndClose(reason = "server_shutdown") {
   for (const [callId, call] of calls.entries()) {
     try {
       if (call.caller && call.caller.readyState === call.caller.OPEN) {
@@ -340,7 +346,9 @@ function notifyAllAndClose() {
   try {
     wss.close();
     httpServer.close();
-  } catch {}
+  } catch (e) {
+    // ignore
+  }
 }
 
 process.on("SIGINT", () => {
